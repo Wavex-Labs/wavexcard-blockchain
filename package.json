@@ -1,26 +1,61 @@
 {
   "name": "wavex-nft",
   "version": "1.0.0",
-  "description": "WaveX NFT Project",
+  "description": "WaveX NFT Project - Balance-based NFT system on Polygon",
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js"
+    "deploy:testnet": "hardhat run scripts/deploy/deployV2.js --network polygonAmoy",
+    "deploy:mainnet": "hardhat run scripts/deploy/deployV2.js --network polygon",
+    "verify": "hardhat run scripts/deploy/verifyContract.js",
+    "setup:tokens": "hardhat run scripts/deploy/setupTokens.js",
+    "setup:merchants": "hardhat run scripts/deploy/setupMerchants.js",
+    "lint": "solhint 'contracts/**/*.sol'",
+    "lint:fix": "solhint 'contracts/**/*.sol' --fix",
+    "format": "prettier --write .",
+    "prepare": "husky install"
   },
-  "keywords": [],
+  "keywords": [
+    "nft",
+    "polygon",
+    "smart-contract",
+    "blockchain",
+    "wavex"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "@typechain/hardhat": "^9.1.0",
     "dotenv": "^16.3.1",
     "hardhat": "^2.19.4",
-    "sharp": "^0.33.5"
+    "hardhat-gas-reporter": "^1.0.10",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "prettier-plugin-solidity": "^1.3.1",
+    "sharp": "^0.33.5",
+    "solhint": "^4.1.1",
+    "solidity-coverage": "^0.8.7",
+    "typechain": "^8.3.2"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.2.0",
+    "@openzeppelin/contracts": "5.0.1",
+    "@openzeppelin/contracts-upgradeable": "5.0.1",
     "axios": "^1.7.9",
     "form-data": "^4.0.1"
+  },
+  "lint-staged": {
+    "*.sol": [
+      "prettier --write",
+      "solhint --fix"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
   }
 }
