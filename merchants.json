@@ -1,20 +1,7 @@
 [
   {
-    "id": 1,
-    "name": "Merchant 1",
-    "address": "0x1234567890abcdef",
-    "templateId": 1,
-    "status": "active",
-    "commissionRate": 5,
-    "contractAddress": "0x1234567890abcdef"
-  },
-  {
-    "id": 2,
-    "name": "Merchant 2",
-    "address": "0x1234567890abcd12",
-    "templateId": 2,
-    "status": "active",
-    "commissionRate": 5,
-    "contractAddress": "0x1234567890abcd12"
+    "address": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5",
+    "name": "Test Merchant",
+    "description": "Test merchant for initial setup"
   }
 ]

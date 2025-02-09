@@ -1,215 +1,161 @@
 # WaveX NFT V2 Development Status
 
-## Current State
+## Overview
+The WaveX NFT V2 system is a comprehensive NFT platform built on Polygon, featuring balance management, event access, and merchant integration capabilities. This document tracks the development status and technical considerations.
 
-### Contract Deployment
-- Successfully deployed WaveXNFTV2 contract to Polygon Amoy testnet
-- Contract Address: 0xB1fe1ded3BE1730ec67b5c4bCc57D3E61DCA9778
-- Contract includes all core functionality: templates, events, merchant management, and token support
+## Core Components Status
 
-### Implemented Features
-1. Template System
-   - Basic template structure implemented
-   - Template creation and modification functions
-   - Default templates (Gold and Platinum) initialization
-   - Template listing functionality
+### Smart Contract Implementation
+- ✅ WaveXNFTV2.sol - Main contract
+- ✅ IWaveXNFTV2.sol - Interface definitions
+- ✅ WaveXLib.sol - Shared libraries
+- ✅ MockERC20.sol - Test helper contracts
 
-2. Payment System
-   - USDT/USDC token support
-   - Balance management
-   - Payment processing
-   - Top-up functionality
+### Infrastructure
+- ✅ Hardhat configuration
+- ✅ Deployment scripts
+- ✅ Contract verification
+- ✅ Token integration (Successfully completed on Amoy network)
 
-3. Event System
-   - Event creation
-   - Event purchase
-   - Event type management
-   - Capacity tracking
+## Functional Areas
 
-4. Merchant Management
-   - Merchant authorization
-   - Merchant revocation
-   - Transaction recording
+### Template System
+**Status**: ✅ Complete
+- Template creation and management
+- Metadata generation and storage
+- Template-based minting
+- Template updates and validation
 
-### Configuration
-- Environment variables properly set in .env
-- Network configuration optimized for Polygon Amoy
-- Gas settings adjusted for better transaction handling
+### Event Management
+**Status**: ✅ Complete
+- Event creation and configuration
+- Access control and validation
+- Event metadata handling
+- Purchase and verification flows
 
-## Testing Status
+### Balance System
+**Status**: ✅ Complete
+- Balance tracking
+- Top-up functionality
+- Payment processing
+- Balance validation
 
-### Completed Tests
-1. Contract Deployment
-   - ✅ Basic deployment
-   - ✅ Constructor initialization
-   - ✅ Environment variable setup
+### Merchant Integration
+**Status**: ✅ Complete
+- Merchant authorization
+- Transaction processing
+- Merchant metadata management
 
-2. Template Management
-   - ✅ Template listing
-   - ✅ Basic template creation
-   - ⚠️ Template initialization (needs adjustment for correct balances)
+### Metadata Handling
+**Status**: ✅ Complete
+- IPFS integration
+- Metadata generation
+- Update mechanisms
+- Validation systems
 
-### Pending Tests
-1. Template System
-   - [ ] Template modification
-   - [ ] Template metadata handling
-   - [ ] VIP functionality
-   - [ ] Discount system
+## Technical Considerations
 
-2. Payment System
-   - [ ] USDT transactions
-   - [ ] USDC transactions
-   - [ ] Balance updates
-   - [ ] Payment processing
-   - [ ] Top-up functionality
+### Gas Optimization
+- ✅ Implemented efficient storage patterns
+- ✅ Batch processing where applicable
+- ✅ Library usage for common operations
+- ❌ Pending gas estimation utilities
 
-3. Event System
-   - [ ] Event creation
-   - [ ] Event purchase
-   - [ ] Capacity management
-   - [ ] Event type validation
+### Security
+- ✅ Access control implementation
+- ✅ Balance validation
+- ✅ Event access verification
+- ✅ Merchant authorization
 
-4. Merchant Operations
-   - [ ] Merchant authorization
-   - [ ] Transaction processing
-   - [ ] Merchant revocation
-   - [ ] Transaction history
+### Testing Coverage
+- ✅ Basic contract functionality
+- ❌ Comprehensive test suite pending
+- ❌ Integration tests needed
+- ❌ Edge case testing required
 
-## Known Issues
+## Network Deployment Status
 
-1. Template Initialization
-   - Current issue with template balances (needs to be updated to 1000 USD for Gold and 3000 USD for Platinum)
-   - Initialization requires proper pause/unpause handling
+### Polygon Amoy (Testnet)
+- **Contract**: ✅ Deployed & Verified
+  - Address: 0x15dEdA5d29cd5Db6bBE7dD5B2031eF07d8A3F1ce
+  
+- **Token Setup**: ✅ Complete
+  - USDT: Successfully integrated (0x5409ED021D9299bf6814279A6A1411A7e866A631)
+  - USDC: Successfully integrated (0x0FA8781a83E46826621b3BC094Ea2A0212e71B23)
+  
+- **Merchant Setup**: ✅ Complete
+  - Test merchant authorized and functional
 
-2. Gas Optimization
-   - Some operations might need gas limit adjustments
-   - Transaction batching could be improved
+### Polygon Mainnet
+- 🔄 Pending deployment
+- Requirements:
+  - Complete test coverage
+  - Security audit
+  - Gas optimization
 
-## Future Development Steps
+## Development Priorities
 
-### Immediate Tasks
-1. Update Template Values
-   ```javascript
-   // Update in initializeDefaultTemplates()
-   _addTemplate(1, "Gold", 1000 * 10**18, 1000 * 10**18, 0, false, "", true);
-   _addTemplate(2, "Platinum", 3000 * 10**18, 3000 * 10**18, 0, false, "", true);
-   ```
+### High Priority
+1. Implement missing utility scripts
+2. Complete test suite development
+3. Create comprehensive documentation
 
-2. Testing Sequence
-   ```bash
-   # 1. Deploy contract
-   npx hardhat run scripts/deploy/deployV2.js --network polygonAmoy
+### Medium Priority
+1. Implement gas estimation utilities
+2. Add network verification tools
+3. Create deployment guides
 
-   # 2. Verify templates
-   npx hardhat run scripts/templates/listTemplates.js --network polygonAmoy
+### Low Priority
+1. Additional test helpers
+2. Documentation improvements
+3. Optional feature implementations
 
-   # 3. Setup tokens
-   npx hardhat run scripts/deploy/setupTokens.js --network polygonAmoy
+## Testing
+- Limited coverage in event management
+- Integration tests needed
+- Performance testing pending
 
-   # 4. Setup merchants
-   npx hardhat run scripts/deploy/setupMerchants.js --network polygonAmoy
+## Next Steps
 
-   # 5. Run system tests
-   npx hardhat run scripts/test/runTests.js --network polygonAmoy
-   ```
+1. **Technical Tasks**
+   - Implement network utilities
+   - Create gas estimation tools
+   - Complete test suite
 
-### Long-term Improvements
-1. Smart Contract
-   - Implement batch operations for gas optimization
-   - Add more event types and template variations
-   - Enhance security measures
-
-2. Testing Framework
-   - Develop comprehensive unit tests
-   - Add integration tests
-   - Implement automated testing pipeline
-
-3. Documentation
+2. **Documentation**
    - Create API documentation
-   - Add deployment guides
+   - Write deployment guides
    - Document testing procedures
 
-## Development Guidelines
+3. **Testing**
+   - Implement comprehensive test suite
+   - Add integration tests
+   - Perform stress testing
 
-### Error Prevention
-1. Always verify contract state before operations:
-   - Check if contract is paused/unpaused
-   - Verify template existence
-   - Confirm merchant authorization
+4. **Optimization**
+   - Gas optimization
+   - Code cleanup
+   - Performance improvements
 
-2. Gas Management:
-   - Use appropriate gas limits for different operations
-   - Monitor gas costs for batch operations
-   - Implement gas optimization strategies
+## Recent Updates
 
-3. Testing Protocol:
-   - Test on local network first
-   - Verify on testnet before mainnet
-   - Document all test results
+- Contract deployed to Amoy testnet
+- Token setup successfully completed
+- Merchant authorization system implemented
+- Basic testing framework established
+- Script organization completed
+- Documentation structure created
 
-### Deployment Process
-1. Pre-deployment:
-   - Verify all environment variables
-   - Check network configuration
-   - Validate contract parameters
+## Support Resources
 
-2. Deployment:
-   - Deploy contract
-   - Initialize templates
-   - Setup tokens
-   - Configure merchants
+- Contract Documentation: Available in docs/
+- Test Cases: In test/v2/
+- Deployment Records: In deployments/
+- Configuration Files: In config/
 
-3. Post-deployment:
-   - Verify all functions
-   - Document deployed addresses
-   - Update configuration files
+## Team Notes
 
-## Future Development Prompt
-
-For future development sessions, consider the following:
-
-1. Contract Upgrades:
-```solidity
-// Implement upgradeable contracts
-// Add new features like:
-- Dynamic pricing
-- Automated events
-- Enhanced security measures
-```
-
-2. Testing Requirements:
-```javascript
-// Implement comprehensive testing:
-- Unit tests for all functions
-- Integration tests for workflows
-- Gas optimization tests
-```
-
-3. Documentation Needs:
-```markdown
-# Required Documentation:
-- API references
-- Integration guides
-- Security considerations
-```
-
-## Version Control
-
-Current repository state:
-- Branch: main
-- Latest commit: [Current development state]
-- Status: Ready for testing phase
-
-To push changes:
-```bash
-git add .
-git commit -m "feat: Update contract implementation and documentation"
-git push origin main
-```
-
-Remember to:
-1. Test all changes locally
-2. Update documentation
-3. Verify gas optimizations
-4. Check security implications
-5. Update test coverage
+- External debugger being used for development
+- Focus on orchestration and documentation
+- Test coverage needs expansion
+- Utility scripts need implementation

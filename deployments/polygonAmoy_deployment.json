@@ -1,0 +1,10 @@
+{
+  "network": "polygonAmoy",
+  "address": "0x15dEdA5d29cd5Db6bBE7dD5B2031eF07D8A3F1ce",
+  "timestamp": "2025-02-09T03:05:41.323Z",
+  "deployerAddress": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5",
+  "supportedTokens": {
+    "USDT": "",
+    "USDC": ""
+  }
+}

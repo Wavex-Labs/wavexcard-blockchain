@@ -1,125 +1,82 @@
-const { ethers } = require("hardhat");
-const { getNetworkConfig } = require("../../config/contract.config");
-const fs = require("fs");
-const path = require("path");
-
-async function getDeployedContract(networkName) {
-  const deploymentPath = path.join(
-    __dirname,
-    `../../deployments/${networkName}_deployment.json`
-  );
-  
-  if (!fs.existsSync(deploymentPath)) {
-    throw new Error(`No deployment found for network ${networkName}`);
-  }
-
-  const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-  const WaveXNFTV2 = await ethers.getContractFactory("WaveXNFTV2");
-  return WaveXNFTV2.attach(deployment.address);
-}
-
-async function verifyTokenContract(tokenAddress) {
-  const code = await ethers.provider.getCode(tokenAddress);
-  if (code === "0x") {
-    throw new Error(`No contract found at address ${tokenAddress}`);
-  }
-  return true;
-}
-
+// scripts/setup/setupTokens.js
 async function main() {
-  console.log("Starting token setup...");
+    console.log("\n🚀 Starting token setup...");
 
-  try {
-    // Get the network
-    const network = await ethers.provider.getNetwork();
-    console.log(`Setting up tokens on network: ${network.name}`);
+    // Get contract
+    const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+    console.log(`📄 Contract Address: ${contractAddress}`);
+    
+    const WaveXNFTV2 = await hre.ethers.getContractFactory("WaveXNFTV2");
+    const contract = WaveXNFTV2.attach(contractAddress);
 
-    // Get network configuration
-    const networkConfig = getNetworkConfig(network.name);
-    console.log("Network configuration loaded");
+    // Get token addresses
+    const usdtAddress = process.env.USDT_CONTRACT_ADDRESS.split('#')[0].trim();
+    const usdcAddress = process.env.USDC_CONTRACT_ADDRESS.split('#')[0].trim();
 
-    // Get the deployed contract
-    const wavexNFT = await getDeployedContract(network.name);
-    console.log("Contract loaded at:", await wavexNFT.getAddress());
-
-    // Setup tokens
     const tokens = {
-      USDT: networkConfig.usdt,
-      USDC: networkConfig.usdc
+        USDT: usdtAddress,
+        USDC: usdcAddress
     };
 
-    const tokenStatus = {};
+    console.log("\n🔍 Token Addresses to Setup:");
+    Object.entries(tokens).forEach(([symbol, address]) => {
+        console.log(`${symbol}: ${address}`);
+    });
 
-    for (const [symbol, address] of Object.entries(tokens)) {
-      if (!address) {
-        console.log(`Skipping ${symbol} setup - address not configured`);
-        continue;
-      }
+    // Get deployer info
+    const [deployer] = await hre.ethers.getSigners();
+    console.log(`\n👤 Deployer: ${deployer.address}`);
+    const balance = await hre.ethers.provider.getBalance(deployer.address);
+    console.log(`💰 Balance: ${hre.ethers.formatEther(balance)} AMOY\n`);
 
-      try {
-        // Verify token contract exists
-        console.log(`Verifying ${symbol} contract at ${address}`);
-        await verifyTokenContract(address);
-
-        // Check if token is already supported
-        const isSupported = await wavexNFT.supportedTokens(address);
+    console.log("🔄 Setting up supported tokens...\n");
+    
+    for (const [symbol, tokenAddress] of Object.entries(tokens)) {
+        console.log(`Processing ${symbol}...`);
         
-        if (!isSupported) {
-          console.log(`Adding support for ${symbol} at ${address}`);
-          const tx = await wavexNFT.addSupportedToken(address);
-          await tx.wait();
-          console.log(`${symbol} support added successfully`);
-        } else {
-          console.log(`${symbol} is already supported`);
+        // Check if token is already supported
+        const isSupported = await contract.supportedTokens(tokenAddress);
+        if (isSupported) {
+            console.log(`✅ ${symbol} is already supported\n`);
+            continue;
         }
 
-        tokenStatus[symbol] = {
-          address,
-          supported: true,
-          lastUpdated: new Date().toISOString()
-        };
+        try {
+            console.log(`Adding ${symbol}: ${tokenAddress}`);
+            const tx = await contract.addSupportedToken(tokenAddress, {
+                gasPrice: BigInt(process.env.GAS_PRICE)
+            });
+            
+            console.log(`📝 Transaction Hash: ${tx.hash}`);
+            const receipt = await tx.wait();
+            console.log(`✅ ${symbol} added successfully`);
+            console.log(`⛽ Gas Used: ${receipt.gasUsed.toString()}\n`);
 
-      } catch (error) {
-        console.error(`Failed to setup ${symbol}:`, error.message);
-        tokenStatus[symbol] = {
-          address,
-          supported: false,
-          error: error.message,
-          lastUpdated: new Date().toISOString()
-        };
-      }
+            // Verify the token was actually added
+            const verifySupported = await contract.supportedTokens(tokenAddress);
+            if (!verifySupported) {
+                throw new Error(`Verification failed for ${symbol}`);
+            }
+
+        } catch (error) {
+            console.error(`❌ Error adding ${symbol}: ${error.message}\n`);
+            throw error;
+        }
     }
 
-    // Save token setup status
-    const tokenStatusPath = path.join(
-      __dirname,
-      `../../deployments/${network.name}_tokens.json`
-    );
-    
-    fs.writeFileSync(
-      tokenStatusPath,
-      JSON.stringify(tokenStatus, null, 2)
-    );
-    
-    console.log(`Token status saved to ${tokenStatusPath}`);
-    console.log("Token setup completed!");
+    // Final verification
+    console.log("🔍 Final Verification:");
+    for (const [symbol, tokenAddress] of Object.entries(tokens)) {
+        const isSupported = await contract.supportedTokens(tokenAddress);
+        console.log(`${symbol}: ${isSupported ? '✅ Supported' : '❌ Not Supported'}`);
+    }
 
-    return tokenStatus;
-
-  } catch (error) {
-    console.error("Token setup failed:", error);
-    process.exit(1);
-  }
+    console.log("\n✨ Token setup completed successfully!");
 }
 
-// Execute setup
-if (require.main === module) {
-  main()
+main()
     .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
+    .catch(error => {
+        console.error("\n❌ Setup failed:", error);
+        process.exit(1);
     });
-}
-
-module.exports = main;

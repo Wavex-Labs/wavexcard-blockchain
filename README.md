@@ -16,15 +16,47 @@ wavex-nft/
 │   └── test/
 │       └── MockERC20.sol        # Test helper contracts
 ├── scripts/
-│   ├── deploy/
-│   │   ├── deployV2.js          # Main deployment script
-│   │   ├── setupMerchants.js    # Merchant configuration
-│   │   └── setupTokens.js       # Token setup
+│   ├── balance/                 # Balance management scripts
+│   │   ├── checkBalance.js      # Balance checking utilities
+│   │   ├── processPayment.js    # Payment processing
+│   │   ├── topUpBalance.js      # Balance top-up functionality
+│   │   └── validateBalance.js   # Balance validation
+│   ├── config/                  # Configuration scripts
+│   │   ├── configValidator.js   # Configuration validation
+│   │   └── metadataConfig.js    # Metadata configuration
+│   ├── deploy/                  # Deployment scripts
+│   │   ├── deployV2.js         # Main deployment script
+│   │   ├── setupMerchants.js   # Merchant configuration
+│   │   └── setupTokens.js      # Token setup
+│   ├── events/                  # Event management scripts
+│   │   ├── createEvent.js      # Event creation
+│   │   ├── eventConfig.js      # Event configuration
+│   │   ├── getEventDetails.js  # Event details retrieval
+│   │   ├── listEvents.js       # Event listing
+│   │   └── updateEvent.js      # Event updates
+│   ├── merchants/              # Merchant management scripts
+│   │   ├── addMerchant.js     # Merchant addition
+│   │   ├── authorizeMerchants.js # Merchant authorization
+│   │   └── manageMerchants.js  # Merchant management
+│   ├── metadata/               # Metadata management scripts
+│   │   ├── generateMetadata.js # Metadata generation
+│   │   ├── updateMetadata.js   # Metadata updates
+│   │   └── validateMetadata.js # Metadata validation
+│   ├── mint/                   # NFT minting scripts
+│   │   ├── batchMint.js       # Batch minting
+│   │   ├── mintFromTemplate.js # Template-based minting
+│   │   └── validateMint.js    # Minting validation
 │   ├── templates/              # Template management scripts
-│   ├── events/                 # Event management scripts
-│   ├── mint/                  # NFT minting scripts
-│   ├── balance/               # Balance management scripts
-│   └── metadata/              # Metadata management scripts
+│   │   ├── createTemplate.js   # Template creation
+│   │   ├── getTemplate.js     # Template retrieval
+│   │   ├── listTemplates.js   # Template listing
+│   │   └── updateTemplate.js  # Template updates
+│   ├── testing/               # Test utilities
+│   │   ├── runTests.js       # Test runner
+│   │   └── testConfig.js     # Test configuration
+│   └── utils/                 # Utility scripts
+│       ├── uploadToIPFS.js    # IPFS upload utilities
+│       └── verifyContract.js  # Contract verification
 ├── test/
 │   └── v2/
 │       └── WaveXNFTV2.test.js   # Contract tests
@@ -104,6 +136,34 @@ npm run verify
 npm run setup:tokens
 npm run setup:merchants
 ```
+
+### Deployment Workflow
+
+The deployment process follows this sequence:
+
+1. **Initial Deployment** (`scripts/deploy/deployV2.js`):
+   - Validates deployment network and account
+   - Creates contract factory
+   - Deploys WaveXNFTV2 contract
+   - Initializes default templates
+   - Saves deployment information to `deployments/{network}_deployment.json`
+   - Automatically verifies contract on block explorer
+   - Outputs deployment summary including:
+     - Network
+     - Contract address
+     - Token support status
+
+2. **Token Setup** (`scripts/deploy/setupTokens.js`):
+   - Configures supported tokens (USDT/USDC)
+   - Sets up token addresses and parameters
+   - Validates token contracts
+
+3. **Merchant Setup** (`scripts/deploy/setupMerchants.js`):
+   - Configures authorized merchants
+   - Sets merchant permissions
+   - Initializes merchant metadata
+
+Each step creates its own logs and saves relevant information to the deployments directory for future reference.
 
 ## Development
 

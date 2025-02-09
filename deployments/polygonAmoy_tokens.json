@@ -1,0 +1,16 @@
+{
+  "USDT": {
+    "address": "0x5409ED021D9299bf6814279A6A1411A7e866A631",
+    "supported": false,
+    "error": "No valid contract found at 0x5409ED021D9299bf6814279A6A1411A7e866A631",
+    "lastUpdated": "2025-02-09T03:19:51.112Z",
+    "addedBy": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5"
+  },
+  "USDC": {
+    "address": "0x0FA8781a83E46826621b3BC094Ea2A0212e71B23",
+    "supported": false,
+    "error": "Cannot mix BigInt and other types, use explicit conversions",
+    "lastUpdated": "2025-02-09T03:19:51.702Z",
+    "addedBy": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5"
+  }
+}
