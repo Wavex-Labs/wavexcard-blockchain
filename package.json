@@ -1,0 +1,26 @@
+{
+  "name": "wavex-nft",
+  "version": "1.0.0",
+  "description": "WaveX NFT Project",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "dotenv": "^16.3.1",
+    "hardhat": "^2.19.4",
+    "sharp": "^0.33.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.2.0",
+    "axios": "^1.7.9",
+    "form-data": "^4.0.1"
+  }
+}
