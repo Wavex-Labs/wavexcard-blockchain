@@ -1,4 +1,3 @@
-// scripts/templates/listTemplates.js
 const hre = require("hardhat");
 require('dotenv').config();
 
@@ -15,55 +14,59 @@ async function listTemplates(options = {}) {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        // Get network gas settings
-        const networkConfig = hre.config.networks[hre.network.name];
-        console.log('\nUsing network gas settings:', {
-            gasPrice: networkConfig.gasPrice ? hre.ethers.formatUnits(networkConfig.gasPrice, 'gwei') + ' gwei' : 'Not set',
-            gasLimit: networkConfig.gasLimit || 'Not set'
-        });
-
-        // Use more conservative gas settings for view functions
+        // Get network gas settings from environment variables instead of network config
         const gasSettings = {
-            gasPrice: networkConfig.gasPrice,
-            gasLimit: 100000 // Lower gas limit for view functions
+            gasPrice: process.env.GAS_PRICE 
+                ? hre.ethers.parseUnits(process.env.GAS_PRICE.toString(), "wei")
+                : undefined,
+            gasLimit: process.env.GAS_LIMIT 
+                ? BigInt(process.env.GAS_LIMIT)
+                : undefined
         };
+
+        console.log('\nUsing gas settings:', {
+            gasPrice: gasSettings.gasPrice 
+                ? `${hre.ethers.formatUnits(gasSettings.gasPrice, "gwei")} gwei`
+                : "network default",
+            gasLimit: gasSettings.gasLimit 
+                ? gasSettings.gasLimit.toString()
+                : "network default"
+        });
 
         console.log("\nFetching template information...");
         
         const templates = [];
         
-        // Get template details for IDs 1 and 2 (default templates)
-        for (let i = 1; i <= 2; i++) {
+        // Get total template count
+        const templateCount = await wavexNFT.getTemplateCount();
+        console.log(`\nFound ${templateCount.toString()} total templates`);
+        
+        // Iterate through all templates
+        for (let i = 1; i <= templateCount; i++) {
             try {
-                const [
-                    name,
-                    baseBalance,
-                    price,
-                    discount,
-                    isVIP,
-                    metadataURI,
-                    active
-                ] = await wavexNFT.getTemplate(i, gasSettings);
+                const template = await wavexNFT.getTemplate(i);
 
-                templates.push({
+                const templateInfo = {
                     id: i,
-                    name,
-                    baseBalance: hre.ethers.formatEther(baseBalance),
-                    price: hre.ethers.formatEther(price),
-                    discount: Number(discount),
-                    isVIP,
-                    metadataURI,
-                    active
-                });
+                    name: template[0],
+                    baseBalance: `$${hre.ethers.formatEther(template[1])}`,
+                    price: `$${hre.ethers.formatEther(template[2])}`,
+                    discount: Number(template[3]),
+                    isVIP: template[4],
+                    metadataURI: template[5],
+                    active: template[6]
+                };
 
-                console.log(`\nTemplate ${i} found:`);
-                console.log(`- Name: ${name}`);
-                console.log(`- Base Balance: ${hre.ethers.formatEther(baseBalance)} MATIC`);
-                console.log(`- Price: ${hre.ethers.formatEther(price)} MATIC`);
-                console.log(`- Discount: ${Number(discount)}%`);
-                console.log(`- VIP: ${isVIP}`);
-                console.log(`- Active: ${active}`);
-                console.log(`- Metadata URI: ${metadataURI}`);
+                templates.push(templateInfo);
+
+                console.log(`\nTemplate ${i}:`);
+                console.log(`- Name: ${templateInfo.name}`);
+                console.log(`- Base Balance: ${templateInfo.baseBalance} USD`);
+                console.log(`- Price: ${templateInfo.price} USD`);
+                console.log(`- Discount: ${templateInfo.discount}%`);
+                console.log(`- VIP: ${templateInfo.isVIP}`);
+                console.log(`- Active: ${templateInfo.active}`);
+                console.log(`- Metadata URI: ${templateInfo.metadataURI}`);
 
             } catch (error) {
                 if (error.message.includes("Template does not exist")) {

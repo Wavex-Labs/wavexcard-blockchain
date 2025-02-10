@@ -1,133 +1,164 @@
-// scripts/templates/createTemplate.js
 const hre = require("hardhat");
-const { TEMPLATE_METADATA } = require('../config/metadataConfig');
 const { getTemplateMetadata } = require('../config/templateConfig');
 require('dotenv').config();
 
-async function createTemplate(templateId, options = {}) {
+async function createTemplate(templateId = null, options = {}) {
+  try {
+    // Get contract instance
+    const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+    const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+    const wavexNFT = WaveXNFT.attach(contractAddress);
+
+    // If no templateId provided, get the next available ID
+    if (templateId === null) {
+      const currentCount = await wavexNFT.getTemplateCount();
+      templateId = Number(currentCount) + 1;
+      console.log(`\nNo template ID provided. Using next available ID: ${templateId}`);
+    }
+
+    console.log(`\nManaging template ${templateId}...`);
+
+    // Get all configuration from .env
+    const config = {
+      name: process.env.TEMPLATE_NEW_NAME,
+      baseBalance: process.env.TEMPLATE_NEW_BASE_BALANCE || "0",
+      price: process.env.TEMPLATE_NEW_PRICE || "0",
+      discount: parseInt(process.env.TEMPLATE_NEW_DISCOUNT || "0"),
+      isVIP: process.env.TEMPLATE_NEW_IS_VIP === "true" || false,
+      contractAddress: process.env.WAVEX_NFT_V2_ADDRESS,
+      gasPrice: process.env.GAS_PRICE,
+      gasLimit: process.env.GAS_LIMIT
+    };
+
+    // Basic validation
+    if (!config.name) {
+      throw new Error(`Template name not found in environment variables`);
+    }
+
+    if (!config.contractAddress) {
+      throw new Error("WAVEX_NFT_V2_ADDRESS not found in environment");
+    }
+
+    console.log('Template configuration:', {
+      name: config.name,
+      baseBalance: config.baseBalance,
+      price: config.price,
+      discount: config.discount,
+      isVIP: config.isVIP
+    });
+
+    // Generate metadata
+    console.log('\nGenerating metadata...');
+    const metadata = await getTemplateMetadata(templateId);
+
+    // Use local URI scheme
+    const metadataURI = `template-${templateId}`;
+    console.log('Using metadata URI:', metadataURI);
+
+    console.log('\nContract address:', config.contractAddress);
+
+    // Configure gas settings
+    const gasSettings = {
+      gasPrice: config.gasPrice 
+        ? hre.ethers.parseUnits(config.gasPrice.toString(), "wei")
+        : undefined,
+      gasLimit: config.gasLimit 
+        ? BigInt(config.gasLimit)
+        : undefined
+    };
+
+    console.log('\nUsing gas settings:', {
+      gasPrice: gasSettings.gasPrice 
+        ? `${hre.ethers.formatUnits(gasSettings.gasPrice, "gwei")} gwei`
+        : "network default",
+      gasLimit: gasSettings.gasLimit 
+        ? gasSettings.gasLimit.toString()
+        : "network default"
+    });
+
+    // Check if template exists
+    let operation = 'create';
     try {
-        console.log(`\nCreating template ${templateId}...`);
+      await wavexNFT.getTemplate(templateId);
+      console.log('\nTemplate already exists. Updating template...');
+      operation = 'update';
+    } catch (error) {
+      if (!error.message.includes("Template does not exist")) {
+        throw error;
+      }
+      console.log('\nCreating new template...');
+    }
 
-        // Validate template exists in metadata config
-        if (!TEMPLATE_METADATA[templateId]) {
-            throw new Error(`Template ID ${templateId} not found in metadata configuration`);
-        }
-
-        const template = TEMPLATE_METADATA[templateId];
-        console.log('Template configuration:', {
-            name: template.name,
-            baseBalance: template.baseBalance,
-            price: template.price,
-            discount: template.discount,
-            isVIP: template.isVIP
-        });
-
-        // Generate metadata
-        console.log('\nGenerating metadata...');
-        const metadata = await getTemplateMetadata(templateId);
-
-        // Use local URI scheme
-        const metadataURI = `template-${templateId}`;
-        console.log('Using metadata URI:', metadataURI);
-
-        // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        if (!contractAddress) {
-            throw new Error("WAVEX_NFT_V2_ADDRESS not found in environment");
-        }
-        console.log('\nContract address:', contractAddress);
-
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
-
-        // Get gas settings from environment or use network defaults
-        const gasPrice = process.env.GAS_PRICE ? hre.ethers.parseUnits(process.env.GAS_PRICE.toString(), "wei") : undefined;
-        const gasLimit = process.env.GAS_LIMIT ? BigInt(process.env.GAS_LIMIT) : undefined;
-
-        console.log('\nUsing gas settings:', {
-            gasPrice: gasPrice ? `${hre.ethers.formatUnits(gasPrice, "gwei")} gwei` : "network default",
-            gasLimit: gasLimit ? gasLimit.toString() : "network default"
-        });
-
-        // First simulate the transaction to get potential revert reason
-        try {
-            await wavexNFT.addTemplate.staticCall(
-                templateId,
-                template.name,
-                hre.ethers.parseEther(template.baseBalance || "0"),
-                hre.ethers.parseEther(template.price || "0"),
-                template.discount || 0,
-                template.isVIP || false,
-                metadataURI,
-                true // active
-            );
-        } catch (error) {
-            console.error("\nTransaction would fail:", error.reason || error.message);
-            throw error;
-        }
-
-        // If simulation succeeds, send the actual transaction
-        console.log('\nSending transaction to create template...');
-        const tx = await wavexNFT.addTemplate(
-            templateId,
-            template.name,
-            hre.ethers.parseEther(template.baseBalance || "0"),
-            hre.ethers.parseEther(template.price || "0"),
-            template.discount || 0,
-            template.isVIP || false,
-            metadataURI,
-            true, // active
-            {
-                gasPrice,
-                gasLimit
-            }
+    // Prepare transaction
+    const tx = operation === 'update' 
+      ? await wavexNFT.modifyTemplate(
+          templateId,
+          config.name,
+          hre.ethers.parseEther(config.baseBalance),
+          hre.ethers.parseEther(config.price),
+          config.discount,
+          config.isVIP,
+          metadataURI,
+          true,
+          gasSettings
+        )
+      : await wavexNFT.addTemplate(
+          templateId,
+          config.name,
+          hre.ethers.parseEther(config.baseBalance),
+          hre.ethers.parseEther(config.price),
+          config.discount,
+          config.isVIP,
+          metadataURI,
+          true,
+          gasSettings
         );
 
-        console.log('Transaction sent:', tx.hash);
-        console.log('Waiting for confirmation...');
-        
-        const receipt = await tx.wait();
-        console.log('Transaction confirmed in block:', receipt.blockNumber);
-        
-        // Verify template was created
-        console.log('\nVerifying template creation...');
-        const createdTemplate = await wavexNFT.getTemplate(templateId);
-        console.log('Template verified:', {
-            name: createdTemplate[0],
-            baseBalance: hre.ethers.formatEther(createdTemplate[1]),
-            price: hre.ethers.formatEther(createdTemplate[2]),
-            discount: Number(createdTemplate[3]),
-            isVIP: createdTemplate[4],
-            metadataURI: createdTemplate[5],
-            active: createdTemplate[6]
-        });
+    console.log(`${operation === 'update' ? 'Update' : 'Creation'} transaction sent:`, tx.hash);
+    console.log('Waiting for confirmation...');
 
-        return {
-            templateId,
-            metadataURI,
-            transactionHash: receipt.hash,
-            blockNumber: receipt.blockNumber
-        };
+    const receipt = await tx.wait();
+    console.log(`Template ${operation} confirmed in block:`, receipt.blockNumber);
 
-    } catch (error) {
-        console.error("\nError creating template:");
-        console.error('- Message:', error.message);
-        if (error.reason) console.error('- Reason:', error.reason);
-        if (error.code) console.error('- Code:', error.code);
-        if (error.data) console.error('- Data:', error.data);
-        if (error.transaction) console.error('- Transaction:', error.transaction);
-        throw error;
-    }
+    // Verify template
+    console.log('\nVerifying template...');
+    const createdTemplate = await wavexNFT.getTemplate(templateId);
+    console.log('Template verified:', {
+      name: createdTemplate[0],
+      baseBalance: hre.ethers.formatEther(createdTemplate[1]),
+      price: hre.ethers.formatEther(createdTemplate[2]),
+      discount: Number(createdTemplate[3]),
+      isVIP: createdTemplate[4],
+      metadataURI: createdTemplate[5],
+      active: createdTemplate[6]
+    });
+
+    return {
+      templateId,
+      metadataURI,
+      operation
+    };
+
+  } catch (error) {
+    console.error("\nError managing template:");
+    console.error('- Message:', error.message);
+    if (error.reason) console.error('- Reason:', error.reason);
+    if (error.code) console.error('- Code:', error.code);
+    if (error.data) console.error('- Data:', error.data);
+    if (error.transaction) console.error('- Transaction:', error.transaction);
+    throw error;
+  }
 }
 
-// Parse command line arguments
 async function main() {
-    // Get template ID from command line arguments
-    const templateId = process.argv.length > 2 ? parseInt(process.argv[2]) : 1;
+    // Get template ID from command line, environment variable, or auto-increment
+    const templateId = process.argv.length > 2 
+      ? parseInt(process.argv[2]) 
+      : (process.env.TEMPLATE_NEW_ID ? parseInt(process.env.TEMPLATE_NEW_ID) : null);
     
     try {
         const result = await createTemplate(templateId);
-        console.log("\nTemplate creation successful!");
+        console.log("\nTemplate management successful!");
         console.log("Result:", result);
         process.exit(0);
     } catch (error) {
@@ -136,7 +167,6 @@ async function main() {
     }
 }
 
-// Run if called directly
 if (require.main === module) {
     main();
 }
