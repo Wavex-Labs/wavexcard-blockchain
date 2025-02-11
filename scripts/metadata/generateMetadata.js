@@ -1,245 +1,233 @@
-// scripts/metadata/generateMetadata.js
-const { TEMPLATE_METADATA, STANDARD_CONFIG } = require('../config/metadataConfig');
-const { EVENT_METADATA, EVENT_CONFIG } = require('../config/eventConfig');
+require('dotenv').config();
+const fs = require("fs");
+const path = require("path");
 const { uploadToIPFS } = require('../utils/pinataUtils');
-const path = require('path');
-const fs = require('fs').promises;
 
-/**
- * Generates metadata for NFTs, templates, or events
- * @param {string} type Type of metadata to generate ('NFT', 'TEMPLATE', 'EVENT')
- * @param {Object} data Data to include in metadata
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Generated metadata
- */
-async function generateMetadata(type, data, options = {}) {
-    try {
-        let metadata;
-        const baseMetadata = {
-            name: data.name || "WaveX Asset",
-            description: data.description || "A WaveX digital asset",
-            image: data.image || "ipfs://QmDefaultImageHash",
-            attributes: [],
-            properties: {
-                type,
-                createdAt: new Date().toISOString(),
-                ...(options.properties || {})
-            }
-        };
-
-        switch (type.toUpperCase()) {
-            case 'NFT':
-                metadata = await generateNFTMetadata(data, baseMetadata, options);
-                break;
-            case 'TEMPLATE':
-                metadata = await generateTemplateMetadata(data, baseMetadata, options);
-                break;
-            case 'EVENT':
-                metadata = await generateEventMetadata(data, baseMetadata, options);
-                break;
-            default:
-                throw new Error(`Unsupported metadata type: ${type}`);
+// Template configurations
+const templateConfigs = {
+    "1": { // Gold
+        name: "Gold",
+        baseBalance: "3000",
+        price: "3000",
+        discount: 6,
+        isVIP: true,
+        image: "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD",
+        validity: 24, // 2 years
+        benefits: [
+            "6% Discount on all purchases",
+            "Priority Support",
+            "Member Events Access"
+        ],
+        cardDesign: {
+            primaryColor: "#FFD700",
+            textColor: "#000000"
         }
-
-        // Validate metadata
-        validateMetadata(metadata);
-
-        return metadata;
-
-    } catch (error) {
-        console.error("Error generating metadata:", error);
-        throw error;
+    },
+    "4": { // Eventbrite
+        name: "Eventbrite",
+        baseBalance: "0",
+        price: "0",
+        discount: 0,
+        isVIP: false,
+        image: "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD", // Update with correct Eventbrite image
+        validity: 12,
+        benefits: [
+            "Event Access",
+            "Basic Support"
+        ],
+        cardDesign: {
+            primaryColor: "#4A90E2",
+            textColor: "#FFFFFF"
+        }
     }
+};
+
+function formatDate(months) {
+    const date = new Date();
+    date.setMonth(date.getMonth() + parseInt(months));
+    return date.toISOString();
 }
 
-/**
- * Generates NFT-specific metadata
- * @private
- */
-async function generateNFTMetadata(data, baseMetadata, options) {
+function getPassTypeIdentifier(templateId) {
+    const prefixes = {
+        "1": "pass.com.wavex.gold",
+        "2": "pass.com.wavex.platinum",
+        "3": "pass.com.wavex.black",
+        "4": "pass.com.wavex.eventbrite"
+    };
+    return prefixes[templateId] || "pass.com.wavex.default";
+}
+
+async function generateCompleteMetadata(templateId, tokenId, owner) {
+    const config = templateConfigs[templateId];
+    if (!config) {
+        throw new Error(`Template ID ${templateId} not found`);
+    }
+
+    const validUntil = formatDate(config.validity);
+    const createdAt = new Date().toISOString();
+
     const metadata = {
-        ...baseMetadata,
-        name: data.name || `WaveX NFT #${Date.now()}`,
+        name: `WaveX ${config.name} Card #${tokenId}`,
+        description: `WaveX ${config.name} membership card with ${config.discount}% discount`,
+        image: config.image,
         attributes: [
             {
                 trait_type: "Token ID",
-                value: data.tokenId?.toString() || "0"
+                value: tokenId.toString()
             },
             {
                 trait_type: "Template",
-                value: data.templateId?.toString() || "Custom"
+                value: config.name
             },
             {
                 trait_type: "Balance",
-                value: data.balance?.toString() || "0"
-            },
-            ...(data.attributes || [])
-        ],
-        properties: {
-            ...baseMetadata.properties,
-            tokenId: data.tokenId,
-            templateId: data.templateId,
-            owner: data.owner
-        }
-    };
-
-    return metadata;
-}
-
-/**
- * Generates template-specific metadata
- * @private
- */
-async function generateTemplateMetadata(data, baseMetadata, options) {
-    const metadata = {
-        ...baseMetadata,
-        name: data.name || `WaveX Template #${data.templateId}`,
-        attributes: [
-            {
-                trait_type: "Template ID",
-                value: data.templateId?.toString()
-            },
-            {
-                trait_type: "Base Balance",
-                value: data.baseBalance?.toString()
-            },
-            {
-                trait_type: "Price",
-                value: data.price?.toString()
+                value: `$${config.baseBalance} USD`
             },
             {
                 trait_type: "Discount",
-                value: `${data.discount || 0}%`
+                value: `${config.discount}%`
             },
             {
-                trait_type: "VIP",
-                value: data.isVIP ? "Yes" : "No"
+                trait_type: "VIP Status",
+                value: config.isVIP ? "Yes" : "No"
             },
-            ...(data.attributes || [])
+            {
+                trait_type: "Valid Until",
+                value: validUntil
+            }
         ],
         properties: {
-            ...baseMetadata.properties,
-            templateId: data.templateId,
-            active: data.active
+            type: "NFT",
+            createdAt: createdAt,
+            tokenId: tokenId.toString(),
+            templateId: templateId.toString(),
+            owner: owner
+        },
+        platforms: {
+            opensea: {
+                external_url: "https://wavexcard.com"
+            },
+            nftVisual: {
+                properties: {
+                    tier: config.name,
+                    benefits: config.benefits,
+                    balance: config.baseBalance,
+                    cardDesign: {
+                        primaryColor: config.cardDesign.primaryColor,
+                        textColor: config.cardDesign.textColor,
+                        image: config.image
+                    }
+                }
+            },
+            appleWallet: {
+                formatVersion: 1,
+                passTypeIdentifier: getPassTypeIdentifier(templateId),
+                serialNumber: `TOKEN-${tokenId}`,
+                teamIdentifier: "JHQFQ72XMR",
+                organizationName: "WaveX",
+                logoText: "WaveX",
+                foregroundColor: config.cardDesign.textColor,
+                backgroundColor: config.cardDesign.primaryColor,
+                storeCard: {
+                    primaryFields: [
+                        {
+                            key: "balance",
+                            label: "BALANCE",
+                            value: config.baseBalance,
+                            currencyCode: "USD"
+                        }
+                    ],
+                    secondaryFields: [
+                        {
+                            key: "tier",
+                            label: "TIER",
+                            value: config.name
+                        },
+                        {
+                            key: "discount",
+                            label: "DISCOUNT",
+                            value: `${config.discount}%`
+                        }
+                    ],
+                    backFields: [
+                        {
+                            key: "validUntil",
+                            label: "VALID UNTIL",
+                            value: validUntil
+                        },
+                        ...config.benefits.map((benefit, index) => ({
+                            key: `benefit${index}`,
+                            label: "BENEFIT",
+                            value: benefit
+                        }))
+                    ]
+                }
+            },
+            prepaidCard: {
+                baseBalance: config.baseBalance,
+                price: config.price,
+                discount: config.discount,
+                isVIP: config.isVIP,
+                validUntil: validUntil,
+                style: {
+                    colors: {
+                        primary: config.cardDesign.primaryColor,
+                        text: config.cardDesign.textColor
+                    },
+                    image: config.image
+                },
+                features: {
+                    benefits: config.benefits,
+                    transferable: true,
+                    rechargeable: true,
+                    upgradeable: templateId !== "3"
+                }
+            }
         }
     };
 
     return metadata;
 }
 
-/**
- * Generates event-specific metadata
- * @private
- */
-async function generateEventMetadata(data, baseMetadata, options) {
-    const metadata = {
-        ...baseMetadata,
-        name: data.name || `WaveX Event #${data.eventId}`,
-        attributes: [
-            {
-                trait_type: "Event ID",
-                value: data.eventId?.toString()
-            },
-            {
-                trait_type: "Capacity",
-                value: data.capacity?.toString()
-            },
-            {
-                trait_type: "Price",
-                value: data.price?.toString()
-            },
-            {
-                trait_type: "Type",
-                value: data.eventType?.toString() || "Standard"
-            },
-            {
-                trait_type: "Status",
-                value: data.active ? "Active" : "Inactive"
-            },
-            ...(data.attributes || [])
-        ],
-        properties: {
-            ...baseMetadata.properties,
-            eventId: data.eventId,
-            active: data.active,
-            soldCount: data.soldCount || 0
-        }
-    };
-
-    return metadata;
-}
-
-/**
- * Validates metadata structure
- * @param {Object} metadata Metadata to validate
- * @throws {Error} If metadata is invalid
- */
-function validateMetadata(metadata) {
-    const requiredFields = ['name', 'description', 'image', 'attributes'];
-    const missingFields = requiredFields.filter(field => !metadata[field]);
-    
-    if (missingFields.length > 0) {
-        throw new Error(`Missing required metadata fields: ${missingFields.join(', ')}`);
-    }
-
-    if (!Array.isArray(metadata.attributes)) {
-        throw new Error('Metadata attributes must be an array');
-    }
-
-    metadata.attributes.forEach((attr, index) => {
-        if (!attr.trait_type || !attr.value) {
-            throw new Error(`Invalid attribute at index ${index}: missing trait_type or value`);
-        }
-    });
-}
-
-/**
- * Saves metadata to local storage and IPFS
- * @param {string} type Metadata type
- * @param {string|number} id Asset ID
- * @param {Object} metadata Metadata to save
- * @returns {Promise<string>} IPFS URI
- */
-async function saveMetadata(type, id, metadata) {
+async function main() {
     try {
-        // Determine storage path based on type
-        let storagePath;
-        switch (type.toUpperCase()) {
-            case 'NFT':
-                storagePath = 'metadata/nfts';
-                break;
-            case 'TEMPLATE':
-                storagePath = STANDARD_CONFIG.metadataPath;
-                break;
-            case 'EVENT':
-                storagePath = EVENT_CONFIG.metadataPath;
-                break;
-            default:
-                throw new Error(`Unsupported metadata type: ${type}`);
-        }
+        // Get the last minted token ID and template ID
+        const tokenId = "1"; // Update with your token ID
+        const templateId = "4"; // Your Eventbrite template
+        const owner = "0xf383A56057374Ae7cb437D61cc86843855F0DdB5"; // Your wallet address
 
-        // Ensure directory exists
-        const metadataDir = path.join(process.cwd(), storagePath);
-        await fs.mkdir(metadataDir, { recursive: true });
-
+        console.log(`Generating metadata for Token #${tokenId} (Template: ${templateId})`);
+        
+        const metadata = await generateCompleteMetadata(templateId, tokenId, owner);
+        
         // Save locally
-        const localPath = path.join(metadataDir, `${id}.json`);
-        await fs.writeFile(localPath, JSON.stringify(metadata, null, 2));
+        const outputDir = path.join(process.cwd(), "V2", "metadata", "nfts");
+        fs.mkdirSync(outputDir, { recursive: true });
+        const filePath = path.join(outputDir, `${tokenId}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(metadata, null, 2));
 
         // Upload to IPFS
-        const ipfsHash = await uploadToIPFS(JSON.stringify(metadata));
-        console.log(`Metadata saved for ${type} ${id}. IPFS hash: ${ipfsHash}`);
-
-        return `ipfs://${ipfsHash}`;
-
+        console.log('Uploading to IPFS...');
+        const ipfsHash = await uploadToIPFS(metadata, `token-${tokenId}`);
+        console.log(`✅ Metadata uploaded to IPFS: ipfs://${ipfsHash}`);
+        
+        return ipfsHash;
     } catch (error) {
-        console.error("Error saving metadata:", error);
+        console.error('❌ Error:', error);
         throw error;
     }
 }
 
 module.exports = {
-    generateMetadata,
-    validateMetadata,
-    saveMetadata
+    generateCompleteMetadata
 };
+
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
+}

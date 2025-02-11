@@ -1,176 +1,105 @@
-// scripts/mint/mintFromTemplate.js
+require('dotenv').config();
 const hre = require("hardhat");
-const { getTemplateMetadata } = require('../templates/templateMetadata');
+const { ethers } = require("hardhat");
 const { uploadToIPFS } = require('../utils/pinataUtils');
-const { validateTemplateMetadata } = require('../templates/templateMetadata');
 
-/**
- * Mints a new NFT from a template
- * @param {Object} params Minting parameters
- * @param {string|number} params.templateId Template ID to mint from
- * @param {string} params.to Address to mint to
- * @param {Object} params.metadata Custom metadata overrides
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Minting result
- */
-async function mintFromTemplate(params, options = {}) {
+async function mint() {
     try {
-        if (!params.templateId || !params.to) {
-            throw new Error("Template ID and recipient address are required");
-        }
+        const [signer] = await ethers.getSigners();
+        console.log(`Using signer: ${signer.address}`);
 
-        // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        const WaveXNFTV2 = await ethers.getContractFactory("WaveXNFTV2");
+        const contract = WaveXNFTV2.attach(process.env.WAVEX_NFT_V2_ADDRESS);
 
-        // Get template metadata
-        const templateMetadata = await getTemplateMetadata(params.templateId);
-        if (!templateMetadata) {
-            throw new Error(`Template ${params.templateId} not found`);
-        }
+        const balance = await ethers.provider.getBalance(signer.address);
+        console.log(`Wallet balance: ${ethers.formatEther(balance)} MATIC`);
 
-        // Generate NFT-specific metadata
-        const nftMetadata = {
-            ...templateMetadata,
-            name: params.metadata?.name || `${templateMetadata.name} #${Date.now()}`,
-            description: params.metadata?.description || templateMetadata.description,
-            image: params.metadata?.image || templateMetadata.image,
+        // Recipient wallet address
+        const recipientAddress = "0x04F670221569C5D5E324A135C620A0FdA4d361d7";
+        console.log(`Minting to recipient address: ${recipientAddress}`);
+
+        const templateId = "4";
+        console.log(`Using template ID: ${templateId} (EventBrite - Free template)`);
+
+        const metadata = {
+            name: "WaveX EventBrite NFT",
+            description: "WaveX EventBrite Access NFT",
+            image: process.env.TEMPLATE_4_IMAGE,
             attributes: [
-                ...templateMetadata.attributes,
+                {
+                    trait_type: "Template",
+                    value: process.env.TEMPLATE_4_NAME
+                },
                 {
                     trait_type: "Mint Date",
                     value: new Date().toISOString()
-                },
-                ...(params.metadata?.attributes || [])
-            ],
-            properties: {
-                ...templateMetadata.properties,
-                mintedTo: params.to,
-                mintedAt: new Date().toISOString(),
-                ...(params.metadata?.properties || {})
-            }
+                }
+            ]
         };
 
-        // Validate metadata
-        validateTemplateMetadata(nftMetadata);
+        console.log('Uploading metadata to IPFS...');
+        const metadataURI = await uploadToIPFS(metadata, `token-${Date.now()}`);
+        console.log('Metadata uploaded:', metadataURI);
 
-        // Upload metadata to IPFS
-        const metadataURI = await uploadToIPFS(JSON.stringify(nftMetadata));
-        console.log(`Metadata uploaded to IPFS: ${metadataURI}`);
+        const maxFeePerGas = ethers.parseUnits("30", "gwei");
+        const maxPriorityFeePerGas = ethers.parseUnits("25", "gwei");
+        const gasLimit = BigInt(2500000);
 
-        // Calculate value to send if template has a price
-        const template = await wavexNFT.getTemplate(params.templateId);
-        const value = template.price;
+        console.log(`Gas settings:`);
+        console.log(`- Max Fee Per Gas: ${ethers.formatUnits(maxFeePerGas, "gwei")} gwei`);
+        console.log(`- Max Priority Fee: ${ethers.formatUnits(maxPriorityFeePerGas, "gwei")} gwei`);
+        console.log(`- Gas Limit: ${gasLimit}`);
 
-        // Mint NFT
-        console.log(`Minting NFT from template ${params.templateId} to ${params.to}...`);
-        const tx = await wavexNFT.mintFromTemplate(
-            params.templateId,
-            params.to,
+        const mintValue = ethers.parseEther("0");
+        console.log(`Mint price: ${ethers.formatEther(mintValue)} MATIC`);
+
+        const estimatedGasCost = maxFeePerGas * gasLimit;
+        console.log(`Estimated max gas cost: ${ethers.formatEther(estimatedGasCost.toString())} MATIC`);
+
+        console.log('Submitting mint transaction...');
+        const tx = await contract.mintFromTemplate(
+            templateId,
+            recipientAddress, // Use recipient address instead of signer
             `ipfs://${metadataURI}`,
             {
-                value,
-                gasLimit: options.gasLimit
+                maxFeePerGas,
+                maxPriorityFeePerGas,
+                gasLimit,
+                value: mintValue,
+                type: 2
             }
         );
 
+        console.log('Transaction submitted:', tx.hash);
         const receipt = await tx.wait();
+        console.log('Transaction confirmed in block:', receipt.blockNumber);
 
-        // Find the Transfer event to get the token ID
-        const transferEvent = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('Transfer')
-        );
-
-        let tokenId;
-        if (transferEvent) {
-            const parsedLog = wavexNFT.interface.parseLog(transferEvent);
-            tokenId = parsedLog.args.tokenId.toString();
-        }
-
-        // Find the BalanceUpdated event
-        const balanceEvent = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('BalanceUpdated')
-        );
-
-        let initialBalance;
-        if (balanceEvent) {
-            const parsedLog = wavexNFT.interface.parseLog(balanceEvent);
-            initialBalance = hre.ethers.formatEther(parsedLog.args.newBalance);
-        }
-
-        console.log(`NFT minted successfully! Token ID: ${tokenId}`);
-        
         return {
-            tokenId,
-            owner: params.to,
-            templateId: params.templateId,
-            initialBalance,
-            metadataURI: `ipfs://${metadataURI}`,
-            transactionHash: receipt.transactionHash
+            success: true,
+            transactionHash: tx.hash,
+            blockNumber: receipt.blockNumber,
+            recipient: recipientAddress
         };
 
     } catch (error) {
-        console.error("Error minting from template:", error);
-        throw error;
-    }
-}
-
-/**
- * Batch mints multiple NFTs from a template
- * @param {Object} params Batch minting parameters
- * @param {string|number} params.templateId Template ID to mint from
- * @param {string[]} params.recipients Array of recipient addresses
- * @param {Object} params.metadata Base metadata for all NFTs
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Batch minting results
- */
-async function batchMintFromTemplate(params, options = {}) {
-    try {
-        if (!params.templateId || !Array.isArray(params.recipients)) {
-            throw new Error("Template ID and recipients array are required");
-        }
-
-        const results = await Promise.allSettled(
-            params.recipients.map((to, index) =>
-                mintFromTemplate(
-                    {
-                        templateId: params.templateId,
-                        to,
-                        metadata: {
-                            ...params.metadata,
-                            name: `${params.metadata?.name || 'WaveX NFT'} #${index + 1}`
-                        }
-                    },
-                    options
-                )
-            )
-        );
-
-        const successful = results.filter(r => r.status === 'fulfilled');
-        const failed = results.filter(r => r.status === 'rejected');
-
+        console.error('Minting failed:', error);
         return {
-            templateId: params.templateId,
-            totalAttempts: params.recipients.length,
-            successfulMints: successful.length,
-            failedMints: failed.length,
-            results: results.map((result, index) => ({
-                recipient: params.recipients[index],
-                success: result.status === 'fulfilled',
-                ...(result.status === 'fulfilled' ? 
-                    { details: result.value } : 
-                    { error: result.reason.message })
-            }))
+            success: false,
+            error: error.message
         };
-
-    } catch (error) {
-        console.error("Error in batch minting:", error);
-        throw error;
     }
 }
 
-module.exports = {
-    mintFromTemplate,
-    batchMintFromTemplate
-};
+if (require.main === module) {
+    mint()
+        .then(result => {
+            console.log('Mint result:', result);
+            process.exit(result.success ? 0 : 1);
+        })
+        .catch(error => {
+            console.error('Fatal error:', error);
+            process.exit(1);
+        });
+}
+
+module.exports = { mint };
