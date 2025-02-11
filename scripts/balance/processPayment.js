@@ -1,4 +1,4 @@
-// scripts/balance/processPayment.js
+//   Terminal command: npx hardhat run scripts\balance\processPayment.js --network polygonAmoy
 const hre = require("hardhat");
 const { checkBalance } = require('./checkBalance');
 
@@ -6,7 +6,7 @@ const { checkBalance } = require('./checkBalance');
  * Processes a payment from a token's balance
  * @param {Object} params Payment parameters
  * @param {string|number} params.tokenId Token ID to process payment from
- * @param {string} params.amount Amount to charge in ETH
+ * @param {string} params.amount Amount to charge in USD
  * @param {string} params.metadata Payment metadata (e.g., merchant reference, items)
  * @param {Object} options Additional options
  * @returns {Promise<Object>} Payment result

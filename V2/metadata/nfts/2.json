@@ -1,0 +1,137 @@
+{
+  "name": "WaveX Gold Card #2",
+  "description": "WaveX Gold membership card with 6% discount",
+  "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD",
+  "attributes": [
+    {
+      "trait_type": "Token ID",
+      "value": "2"
+    },
+    {
+      "trait_type": "Template",
+      "value": "Gold"
+    },
+    {
+      "trait_type": "Balance",
+      "value": "$3000.0 USD"
+    },
+    {
+      "trait_type": "Discount",
+      "value": "6%"
+    },
+    {
+      "trait_type": "VIP Status",
+      "value": "Yes"
+    },
+    {
+      "trait_type": "Valid Until",
+      "value": "2027-02-11T21:09:43.645Z"
+    }
+  ],
+  "properties": {
+    "type": "NFT",
+    "createdAt": "2025-02-11T21:09:43.651Z",
+    "tokenId": "2",
+    "templateId": "1",
+    "owner": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5"
+  },
+  "platforms": {
+    "opensea": {
+      "external_url": "https://wavexcard.com"
+    },
+    "nftVisual": {
+      "properties": {
+        "tier": "Gold",
+        "benefits": [
+          "6% Discount on all purchases",
+          "Priority Support",
+          "Member Events Access"
+        ],
+        "balance": "3000.0",
+        "cardDesign": {
+          "primaryColor": "#FFD700",
+          "textColor": "#000000",
+          "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD"
+        }
+      }
+    },
+    "appleWallet": {
+      "formatVersion": 1,
+      "passTypeIdentifier": "pass.com.wavex.gold",
+      "serialNumber": "TOKEN-2",
+      "teamIdentifier": "JHQFQ72XMR",
+      "organizationName": "WaveX",
+      "logoText": "WaveX",
+      "foregroundColor": "#000000",
+      "backgroundColor": "#FFD700",
+      "storeCard": {
+        "primaryFields": [
+          {
+            "key": "balance",
+            "label": "BALANCE",
+            "value": "3000.0",
+            "currencyCode": "USD"
+          }
+        ],
+        "secondaryFields": [
+          {
+            "key": "tier",
+            "label": "TIER",
+            "value": "Gold"
+          },
+          {
+            "key": "discount",
+            "label": "DISCOUNT",
+            "value": "6%"
+          }
+        ],
+        "backFields": [
+          {
+            "key": "validUntil",
+            "label": "VALID UNTIL",
+            "value": "2027-02-11T21:09:43.645Z"
+          },
+          {
+            "key": "benefit0",
+            "label": "BENEFIT",
+            "value": "6% Discount on all purchases"
+          },
+          {
+            "key": "benefit1",
+            "label": "BENEFIT",
+            "value": "Priority Support"
+          },
+          {
+            "key": "benefit2",
+            "label": "BENEFIT",
+            "value": "Member Events Access"
+          }
+        ]
+      }
+    },
+    "prepaidCard": {
+      "baseBalance": "3000.0",
+      "price": "3000.0",
+      "discount": "6",
+      "isVIP": true,
+      "validUntil": "2027-02-11T21:09:43.645Z",
+      "style": {
+        "colors": {
+          "primary": "#FFD700",
+          "text": "#000000"
+        },
+        "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD"
+      },
+      "features": {
+        "benefits": [
+          "6% Discount on all purchases",
+          "Priority Support",
+          "Member Events Access"
+        ],
+        "transferable": true,
+        "rechargeable": true,
+        "upgradeable": true
+      }
+    }
+  }
+}

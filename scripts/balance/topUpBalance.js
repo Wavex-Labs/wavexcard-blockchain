@@ -1,84 +1,136 @@
-// scripts/balance/topUpBalance.js
+//   Terminal command: npx hardhat run scripts\balance\topUpBalance.js --network polygonAmoy
+require('dotenv').config();
 const hre = require("hardhat");
 const { checkBalance } = require('./checkBalance');
 
 /**
- * Tops up a token's balance
- * @param {Object} params Top-up parameters
- * @param {string|number} params.tokenId Token ID to top up
- * @param {string} params.amount Amount to top up in ETH/tokens
- * @param {string} [params.paymentToken] Optional ERC20 token address for USDT/USDC
- * @param {Object} options Additional options
+ * Validates environment variables
+ * @throws {Error} If required variables are missing
+ */
+function validateEnvVariables() {
+    const required = [
+        'WAVEX_NFT_V2_ADDRESS',
+        'USDT_CONTRACT_ADDRESS',
+        'USDC_CONTRACT_ADDRESS',
+        'GAS_LIMIT',
+        'TOPUP_TOKEN_ID',           // Token ID to top up
+        'TOPUP_AMOUNT',            // Amount in USD
+        'TOPUP_PAYMENT_TOKEN',     // Payment token to use (USDT or USDC address)
+        'MIN_TOPUP_AMOUNT',        // Minimum top-up amount in USD
+        'MAX_TOPUP_AMOUNT'         // Maximum top-up amount in USD
+    ];
+
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+}
+
+/**
+ * Validates top-up amount
+ * @param {string} amount Amount to validate in USD
+ * @returns {boolean}
+ */
+function validateTopUpAmount(amount) {
+    const value = parseFloat(amount);
+    const min = parseFloat(process.env.MIN_TOPUP_AMOUNT);
+    const max = parseFloat(process.env.MAX_TOPUP_AMOUNT);
+
+    if (isNaN(value) || value < min || value > max) {
+        throw new Error(`Amount must be between $${min} and $${max} USD`);
+    }
+    return true;
+}
+// Main execution
+async function main() {
+    try {
+        const result = await topUpBalance();
+        console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+        console.error("Error:", error.message);
+        process.exit(1);
+    }
+}
+
+// Execute the script
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
+}
+/**
+ * Tops up a token's balance using environment variables
  * @returns {Promise<Object>} Top-up result
  */
-async function topUpBalance(params, options = {}) {
+async function topUpBalance() {
     try {
-        if (!params.tokenId || !params.amount) {
-            throw new Error("Token ID and amount are required");
+        validateEnvVariables();
+
+        const params = {
+            tokenId: process.env.TOPUP_TOKEN_ID,
+            amount: process.env.TOPUP_AMOUNT,
+            paymentToken: process.env.TOPUP_PAYMENT_TOKEN
+        };
+
+        validateTopUpAmount(params.amount);
+
+        // Get contract instances
+        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+        const ERC20 = await hre.ethers.getContractFactory("ERC20");
+        
+        const wavexNFT = WaveXNFT.attach(process.env.WAVEX_NFT_V2_ADDRESS);
+        const token = ERC20.attach(params.paymentToken);
+
+        // Validate payment token
+        const supportedTokens = {
+            USDT: process.env.USDT_CONTRACT_ADDRESS,
+            USDC: process.env.USDC_CONTRACT_ADDRESS
+        };
+
+        if (!Object.values(supportedTokens).includes(params.paymentToken)) {
+            throw new Error(`Unsupported payment token. Must be one of: ${Object.keys(supportedTokens).join(', ')}`);
         }
 
-        // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        // Check if token is supported by contract
+        const isSupported = await wavexNFT.supportedTokens(params.paymentToken);
+        if (!isSupported) {
+            throw new Error(`Token ${params.paymentToken} is not supported by the contract`);
+        }
 
         // Get initial balance
         const initialBalance = await checkBalance(params.tokenId);
 
-        let tx;
-        if (params.paymentToken) {
-            // ERC20 top-up (USDT/USDC)
-            const ERC20 = await hre.ethers.getContractFactory("IERC20");
-            const token = ERC20.attach(params.paymentToken);
-
-            // Check if token is supported
-            const isSupported = await wavexNFT.supportedTokens(params.paymentToken);
-            if (!isSupported) {
-                throw new Error(`Token ${params.paymentToken} is not supported`);
-            }
-
-            // Check allowance
-            const signer = wavexNFT.signer;
-            const signerAddress = await signer.getAddress();
-            const amount = hre.ethers.parseEther(params.amount);
-            const allowance = await token.allowance(signerAddress, contractAddress);
-
-            if (allowance < amount) {
-                console.log("Approving token transfer...");
-                const approveTx = await token.approve(contractAddress, amount);
-                await approveTx.wait();
-            }
-
-            // Top up with ERC20
-            console.log(`Topping up token ${params.tokenId} with ${params.amount} tokens...`);
-            tx = await wavexNFT.topUpBalance(
-                params.tokenId,
-                amount,
-                params.paymentToken,
-                {
-                    gasLimit: options.gasLimit
-                }
-            );
-        } else {
-            // ETH top-up
-            console.log(`Topping up token ${params.tokenId} with ${params.amount} ETH...`);
-            tx = await wavexNFT.topUpBalance(
-                params.tokenId,
-                hre.ethers.parseEther("0"),
-                hre.ethers.ZeroAddress,
-                {
-                    value: hre.ethers.parseEther(params.amount),
-                    gasLimit: options.gasLimit
-                }
-            );
+        // Handle token approval
+        const signer = wavexNFT.signer;
+        const signerAddress = await signer.getAddress();
+        const amount = params.amount; // Amount in USD (USDT/USDC have 6 decimals)
+        
+        const allowance = await token.allowance(signerAddress, process.env.WAVEX_NFT_V2_ADDRESS);
+        if (allowance < amount) {
+            const approveTx = await token.approve(process.env.WAVEX_NFT_V2_ADDRESS, amount);
+            await approveTx.wait();
         }
+
+        // Execute top-up transaction
+        const tx = await wavexNFT.topUpBalance(
+            params.tokenId,
+            amount,
+            params.paymentToken,
+            {
+                gasLimit: process.env.GAS_LIMIT,
+                gasPrice: process.env.GAS_PRICE
+            }
+        );
 
         const receipt = await tx.wait();
 
         // Get updated balance
         const updatedBalance = await checkBalance(params.tokenId);
 
-        // Find and parse the BalanceUpdated event
+        // Parse BalanceUpdated event
         const balanceUpdatedLog = receipt.logs.find(
             log => log.topics[0] === wavexNFT.interface.getEventTopic('BalanceUpdated')
         );
@@ -88,7 +140,7 @@ async function topUpBalance(params, options = {}) {
             const parsedLog = wavexNFT.interface.parseLog(balanceUpdatedLog);
             eventData = {
                 tokenId: parsedLog.args.tokenId.toString(),
-                newBalance: hre.ethers.formatEther(parsedLog.args.newBalance),
+                newBalance: parsedLog.args.newBalance.toString(),
                 updateType: parsedLog.args.updateType
             };
         }
@@ -96,10 +148,12 @@ async function topUpBalance(params, options = {}) {
         return {
             tokenId: params.tokenId,
             amount: params.amount,
-            paymentToken: params.paymentToken || 'ETH',
+            paymentToken: params.paymentToken,
             initialBalance: initialBalance.balance,
             newBalance: updatedBalance.balance,
             transactionHash: receipt.transactionHash,
+            network: process.env.NETWORK_NAME,
+            timestamp: new Date().toISOString(),
             event: eventData
         };
 
@@ -109,62 +163,6 @@ async function topUpBalance(params, options = {}) {
     }
 }
 
-/**
- * Batch tops up multiple tokens
- * @param {Array<Object>} topUps Array of top-up operations
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Batch results
- */
-async function batchTopUp(topUps, options = {}) {
-    try {
-        if (!Array.isArray(topUps) || topUps.length === 0) {
-            throw new Error("At least one top-up operation is required");
-        }
-
-        const results = await Promise.allSettled(
-            topUps.map(params =>
-                topUpBalance(params, options)
-                    .then(result => ({
-                        tokenId: params.tokenId,
-                        success: true,
-                        details: result
-                    }))
-                    .catch(error => ({
-                        tokenId: params.tokenId,
-                        success: false,
-                        error: error.message
-                    }))
-            )
-        );
-
-        // Calculate totals
-        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success);
-        const totalAmount = successful.reduce(
-            (sum, r) => sum + parseFloat(r.value.details.amount),
-            0
-        );
-
-        return {
-            totalOperations: topUps.length,
-            successfulTopUps: successful.length,
-            failedTopUps: results.length - successful.length,
-            totalAmount: totalAmount.toString(),
-            results: results.map(r => 
-                r.status === 'fulfilled' ? r.value : {
-                    tokenId: r.reason.tokenId,
-                    success: false,
-                    error: r.reason.message
-                }
-            )
-        };
-
-    } catch (error) {
-        console.error("Error in batch top-up:", error);
-        throw error;
-    }
-}
-
 module.exports = {
-    topUpBalance,
-    batchTopUp
+    topUpBalance
 };

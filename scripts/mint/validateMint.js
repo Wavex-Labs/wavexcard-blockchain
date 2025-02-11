@@ -1,179 +1,245 @@
-// scripts/mint/validateMint.js
+require('dotenv').config();
 const hre = require("hardhat");
-const { validateTemplateMetadata } = require('../templates/templateMetadata');
-const { isAddress } = require('ethers/lib/utils');
+const { isAddress } = require('ethers');
+const path = require('path');
+const fs = require('fs');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-/**
- * Validates mint parameters and requirements
- * @param {Object} params Parameters to validate
- * @param {string|number} params.templateId Template ID
- * @param {string} params.to Recipient address
- * @param {Object} params.metadata Optional metadata
- * @returns {Promise<Object>} Validation result
- */
-async function validateMint(params) {
+function validateEnvVariables() {
+    const required = [
+        'WAVEX_NFT_V2_ADDRESS',
+        'VALIDATE_TOKEN_ID'
+    ];
+
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+}
+
+async function validateMint() {
     try {
+        validateEnvVariables();
+
+        const tokenId = process.env.VALIDATE_TOKEN_ID;
         const validationResults = {
+            tokenId,
             valid: true,
-            checks: {},
-            errors: []
+            onChainData: {},
+            errors: [],
+            metadata: {
+                onChain: null,
+                local: null,
+                comparison: {
+                    matches: false,
+                    differences: []
+                }
+            }
         };
 
         // Get contract instance
         const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+        if (!isAddress(contractAddress)) {
+            throw new Error('Invalid contract address in environment variables');
+        }
+
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        // Check template ID
+        // Get token data
         try {
-            const template = await wavexNFT.getTemplate(params.templateId);
-            validationResults.checks.template = {
-                exists: true,
-                active: template.active,
-                price: hre.ethers.formatEther(template.price),
-                baseBalance: hre.ethers.formatEther(template.baseBalance)
+            const [owner, balance, uri] = await Promise.all([
+                wavexNFT.ownerOf(tokenId).catch(() => null),
+                wavexNFT.tokenBalance(tokenId),
+                wavexNFT.tokenURI(tokenId)
+            ]);
+
+            validationResults.onChainData.token = {
+                exists: owner !== null,
+                owner: owner || null,
+                balance: balance ? balance.toString() : null,
+                uri
             };
 
-            if (!template.active) {
+            if (!owner) {
                 validationResults.valid = false;
-                validationResults.errors.push("Template is not active");
+                validationResults.errors.push(`Token ${tokenId} does not exist`);
+                return validationResults;
             }
-        } catch (error) {
-            validationResults.valid = false;
-            validationResults.checks.template = { exists: false };
-            validationResults.errors.push("Template does not exist");
-        }
 
-        // Validate recipient address
-        if (!params.to || !isAddress(params.to)) {
-            validationResults.valid = false;
-            validationResults.checks.recipient = { valid: false };
-            validationResults.errors.push("Invalid recipient address");
-        } else {
-            validationResults.checks.recipient = { valid: true };
-        }
-
-        // Check if recipient is a contract
-        const recipientCode = await hre.ethers.provider.getCode(params.to);
-        const isContract = recipientCode !== '0x';
-        validationResults.checks.recipient.isContract = isContract;
-
-        if (isContract) {
+            // Get template information
             try {
-                // Check if contract implements ERC721Receiver
-                const supportsERC721 = await wavexNFT.supportsInterface('0x150b7a02');
-                validationResults.checks.recipient.supportsERC721 = supportsERC721;
+                const templateCount = await wavexNFT.getTemplateCount();
+                let templateFound = false;
                 
-                if (!supportsERC721) {
-                    validationResults.valid = false;
-                    validationResults.errors.push("Recipient contract does not implement ERC721Receiver");
+                for (let i = 1; i <= templateCount; i++) {
+                    const template = await wavexNFT.getTemplate(i);
+                    if (template && template[6] !== undefined) { // Check if active exists
+                        validationResults.onChainData.template = {
+                            id: i.toString(),
+                            name: template[0],
+                            baseBalance: template[1].toString(),
+                            price: template[2].toString(),
+                            discount: template[3].toString(),
+                            isVIP: template[4],
+                            metadataURI: template[5],
+                            active: template[6]
+                        };
+                        templateFound = true;
+                        break;
+                    }
+                }
+
+                if (!templateFound) {
+                    validationResults.errors.push("Template not found");
                 }
             } catch (error) {
-                validationResults.valid = false;
-                validationResults.errors.push("Could not verify ERC721 receiver support");
+                console.error("Error fetching template:", error);
+                validationResults.errors.push("Could not fetch template information");
             }
+
+        } catch (error) {
+            validationResults.valid = false;
+            validationResults.errors.push(`Error fetching token data: ${error.message}`);
+            return validationResults;
         }
 
-        // Validate metadata if provided
-        if (params.metadata) {
-            try {
-                validateTemplateMetadata({
-                    ...params.metadata,
-                    attributes: params.metadata.attributes || []
-                });
-                validationResults.checks.metadata = { valid: true };
-            } catch (error) {
-                validationResults.valid = false;
-                validationResults.checks.metadata = { valid: false };
-                validationResults.errors.push(`Invalid metadata: ${error.message}`);
-            }
-        }
-
-        // Check contract pause status
+        // Get contract status
         try {
-            const paused = await wavexNFT.paused();
-            validationResults.checks.contract = { paused };
-            
+            const [paused, owner] = await Promise.all([
+                wavexNFT.paused(),
+                wavexNFT.owner()
+            ]);
+
+            validationResults.onChainData.contract = {
+                address: contractAddress,
+                paused,
+                owner
+            };
+
             if (paused) {
                 validationResults.valid = false;
                 validationResults.errors.push("Contract is paused");
             }
         } catch (error) {
-            validationResults.errors.push("Could not check contract pause status");
+            validationResults.errors.push("Could not fetch contract status");
+            console.error("Contract status error:", error);
         }
 
-        // Estimate gas for the mint transaction
-        if (validationResults.valid) {
-            try {
-                const template = await wavexNFT.getTemplate(params.templateId);
-                const gasEstimate = await wavexNFT.estimateGas.mintFromTemplate(
-                    params.templateId,
-                    params.to,
-                    "ipfs://placeholder",
-                    { value: template.price }
-                );
-                
-                validationResults.checks.gas = {
-                    estimated: true,
-                    estimate: gasEstimate.toString()
-                };
-            } catch (error) {
-                validationResults.valid = false;
-                validationResults.checks.gas = { estimated: false };
-                validationResults.errors.push(`Gas estimation failed: ${error.message}`);
+        // Get and compare metadata
+        try {
+            // Get on-chain metadata
+            if (validationResults.onChainData.token.uri) {
+                const tokenURI = validationResults.onChainData.token.uri;
+                if (tokenURI.startsWith('ipfs://')) {
+                    const ipfsHash = tokenURI.replace('ipfs://', '');
+                    const response = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`);
+                    const metadata = await response.json();
+                    validationResults.metadata.onChain = metadata;
+                }
             }
+
+            // Get local metadata
+            const localMetadataPath = path.join(process.cwd(), "V2", "metadata", "nfts", `${tokenId}.json`);
+            if (fs.existsSync(localMetadataPath)) {
+                const localMetadata = JSON.parse(fs.readFileSync(localMetadataPath, 'utf8'));
+                validationResults.metadata.local = localMetadata;
+
+                // Compare metadata
+                if (validationResults.metadata.onChain) {
+                    const differences = compareMetadata(
+                        validationResults.metadata.onChain,
+                        validationResults.metadata.local
+                    );
+
+                    validationResults.metadata.comparison = {
+                        matches: differences.length === 0,
+                        differences
+                    };
+
+                    if (differences.length > 0) {
+                        validationResults.valid = false;
+                        validationResults.errors.push("Metadata mismatch between on-chain and local");
+                    }
+                }
+            }
+        } catch (error) {
+            validationResults.errors.push("Error comparing metadata");
+            console.error("Metadata comparison error:", error);
         }
 
         return validationResults;
-
     } catch (error) {
-        console.error("Error validating mint parameters:", error);
+        console.error("Error validating token:", error);
         throw error;
     }
 }
 
-/**
- * Batch validates mint parameters for multiple recipients
- * @param {Object} params Batch validation parameters
- * @param {string|number} params.templateId Template ID
- * @param {string[]} params.recipients Array of recipient addresses
- * @param {Object} params.metadata Base metadata
- * @returns {Promise<Object>} Batch validation results
- */
-async function batchValidateMint(params) {
-    try {
-        if (!Array.isArray(params.recipients)) {
-            throw new Error("Recipients must be an array");
+function compareMetadata(onChain, local) {
+    const differences = [];
+
+    // Compare basic fields
+    const fieldsToCompare = ['name', 'description', 'image'];
+    fieldsToCompare.forEach(field => {
+        if (onChain[field] !== local[field]) {
+            differences.push({
+                field,
+                onChain: onChain[field],
+                local: local[field]
+            });
         }
+    });
 
-        const results = await Promise.all(
-            params.recipients.map(to =>
-                validateMint({
-                    templateId: params.templateId,
-                    to,
-                    metadata: params.metadata
-                })
-            )
-        );
-
-        return {
-            templateId: params.templateId,
-            totalValidations: params.recipients.length,
-            validCount: results.filter(r => r.valid).length,
-            invalidCount: results.filter(r => !r.valid).length,
-            results: results.map((result, index) => ({
-                recipient: params.recipients[index],
-                ...result
-            }))
-        };
-
-    } catch (error) {
-        console.error("Error in batch validation:", error);
-        throw error;
+    // Compare attributes
+    if (onChain.attributes && local.attributes) {
+        onChain.attributes.forEach((attr, index) => {
+            const localAttr = local.attributes.find(a => a.trait_type === attr.trait_type);
+            if (!localAttr || localAttr.value !== attr.value) {
+                differences.push({
+                    field: `attributes[${index}]`,
+                    trait: attr.trait_type,
+                    onChain: attr.value,
+                    local: localAttr ? localAttr.value : 'missing'
+                });
+            }
+        });
     }
+
+    return differences;
+}
+
+async function main() {
+    try {
+        const results = await validateMint();
+        // Pretty print the results with proper formatting
+        console.log(JSON.stringify(results, null, 2));
+        
+        // If there are differences, highlight them specifically
+        if (results.metadata.comparison && results.metadata.comparison.differences.length > 0) {
+            console.log('\nMetadata Differences Found:');
+            results.metadata.comparison.differences.forEach(diff => {
+                console.log(`\nField: ${diff.field}`);
+                console.log(`On-chain: ${diff.onChain}`);
+                console.log(`Local   : ${diff.local}`);
+            });
+        }
+    } catch (error) {
+        console.error("Validation failed:", error);
+        process.exit(1);
+    }
+}
+
+// Execute the script
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {
     validateMint,
-    batchValidateMint
+    compareMetadata
 };

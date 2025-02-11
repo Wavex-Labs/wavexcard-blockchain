@@ -1,6 +1,50 @@
-// scripts/balance/checkBalance.js
+// npx hardhat run scripts/balance/checkBalance.js --network polygonAmoy
+require('dotenv').config();
 const hre = require("hardhat");
 
+// Environment variable validation
+function validateEnvVariables() {
+    const required = [
+        'WAVEX_NFT_V2_ADDRESS',
+        'NETWORK_RPC_URL',
+        'DEFAULT_BATCH_SIZE',
+        'TRANSACTION_HISTORY_LIMIT'
+    ];
+
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+}
+async function main() {
+    try {
+        const tokenId = process.env.CHECK_BALANCE_TOKEN_ID;
+        if (!tokenId) {
+            throw new Error("TOKEN_ID environment variable is required");
+        }
+
+        const options = {
+            includeHistory: true,
+            includeEvents: true
+        };
+
+        const result = await checkBalance(tokenId, options);
+        console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+        console.error("Error:", error.message);
+        process.exit(1);
+    }
+}
+
+// Execute the script
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
+}
 /**
  * Checks the balance of a specific token
  * @param {string|number} tokenId Token ID to check
@@ -9,30 +53,37 @@ const hre = require("hardhat");
  */
 async function checkBalance(tokenId, options = {}) {
     try {
+        // Validate environment variables
+        validateEnvVariables();
+
         if (!tokenId) {
             throw new Error("Token ID is required");
         }
 
-        // Get contract instance
+        // Get contract instance using environment variables
         const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
         // Get token balance
         const balance = await wavexNFT.tokenBalance(tokenId);
-
-        // Get token owner
         const owner = await wavexNFT.ownerOf(tokenId);
 
         // Get transaction history if requested
         let transactions = [];
         if (options.includeHistory) {
             const txCount = await wavexNFT.getTransactionCount(tokenId);
+            // Convert BigInt to Number safely
+            const txCountNumber = Number(txCount);
+            const historyLimit = parseInt(process.env.TRANSACTION_HISTORY_LIMIT || '100');
             
-            for (let i = 0; i < txCount; i++) {
+            // Limit the number of transactions to process
+            const processCount = Math.min(txCountNumber, historyLimit);
+            
+            for (let i = 0; i < processCount; i++) {
                 const tx = await wavexNFT.getTransaction(tokenId, i);
                 transactions.push({
-                    timestamp: new Date(tx.timestamp.toNumber() * 1000).toISOString(),
+                    timestamp: new Date(Number(tx.timestamp) * 1000).toISOString(),
                     merchant: tx.merchant,
                     amount: hre.ethers.formatEther(tx.amount),
                     type: tx.transactionType,
@@ -54,12 +105,13 @@ async function checkBalance(tokenId, options = {}) {
             owner,
             balance: hre.ethers.formatEther(balance),
             balanceWei: balance.toString(),
-            lastChecked: new Date().toISOString()
+            lastChecked: new Date().toISOString(),
+            network: process.env.NETWORK_NAME || 'unknown'
         };
 
         if (options.includeHistory) {
             response.transactions = transactions;
-            
+
             // Calculate statistics
             const stats = transactions.reduce((acc, tx) => {
                 const amount = parseFloat(tx.amount);
@@ -77,7 +129,6 @@ async function checkBalance(tokenId, options = {}) {
                 topUpCount: 0,
                 paymentCount: 0
             });
-
             response.statistics = stats;
         }
 
@@ -104,40 +155,58 @@ async function checkBalance(tokenId, options = {}) {
  */
 async function batchCheckBalance(tokenIds, options = {}) {
     try {
+        // Validate environment variables
+        validateEnvVariables();
+
         if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
             throw new Error("At least one token ID is required");
         }
 
-        const results = await Promise.allSettled(
-            tokenIds.map(tokenId =>
-                checkBalance(tokenId, options)
-                    .then(result => ({
-                        tokenId,
-                        success: true,
-                        details: result
-                    }))
-                    .catch(error => ({
-                        tokenId,
-                        success: false,
-                        error: error.message
-                    }))
-            )
-        );
+        // Use batch size from environment or default
+        const batchSize = parseInt(process.env.DEFAULT_BATCH_SIZE || '50');
+        const chunks = [];
 
-        // Calculate totals
-        const successfulChecks = results.filter(r => r.value.success);
+        // Split tokenIds into chunks of batchSize
+        for (let i = 0; i < tokenIds.length; i += batchSize) {
+            chunks.push(tokenIds.slice(i, i + batchSize));
+        }
+
+        const allResults = [];
+        for (const chunk of chunks) {
+            const chunkResults = await Promise.allSettled(
+                chunk.map(tokenId =>
+                    checkBalance(tokenId, options)
+                        .then(result => ({
+                            tokenId,
+                            success: true,
+                            details: result
+                        }))
+                        .catch(error => ({
+                            tokenId,
+                            success: false,
+                            error: error.message
+                        }))
+                )
+            );
+            allResults.push(...chunkResults.map(r => r.value));
+        }
+
+        const successfulChecks = allResults.filter(r => r.success);
         const totalBalance = successfulChecks.reduce(
-            (sum, r) => sum + parseFloat(r.value.details.balance),
+            (sum, r) => sum + parseFloat(r.details.balance),
             0
         );
 
         return {
             totalTokens: tokenIds.length,
             successfulChecks: successfulChecks.length,
-            failedChecks: results.length - successfulChecks.length,
+            failedChecks: allResults.length - successfulChecks.length,
             totalBalance: totalBalance.toString(),
             averageBalance: (totalBalance / successfulChecks.length).toString(),
-            results: results.map(r => r.value)
+            batchSize,
+            network: process.env.NETWORK_NAME || 'unknown',
+            timestamp: new Date().toISOString(),
+            results: allResults
         };
 
     } catch (error) {
