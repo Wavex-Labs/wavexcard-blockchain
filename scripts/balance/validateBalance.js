@@ -1,116 +1,142 @@
-// scripts/balance/validateBalance.js
+require('dotenv').config();
 const hre = require("hardhat");
 const { checkBalance } = require('./checkBalance');
 
-/**
- * Validates a token's balance for specific operations
- * @param {Object} params Validation parameters
- * @param {string|number} params.tokenId Token ID to validate
- * @param {string} [params.requiredAmount] Required amount for operation
- * @param {string} [params.operation] Operation type (e.g., 'PAYMENT', 'EVENT')
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Validation result
- */
-async function validateBalance(params, options = {}) {
+function validateEnvVariables() {
+    const required = [
+        'WAVEX_NFT_V2_ADDRESS',
+        'USDT_CONTRACT_ADDRESS',
+        'USDC_CONTRACT_ADDRESS',
+        'VALIDATE_TOKEN_ID',
+        'VALIDATE_REQUIRED_AMOUNT',
+        'VALIDATE_OPERATION_TYPE',
+        'VALIDATE_INCLUDE_HISTORY',
+        'VALIDATE_INCLUDE_EVENTS',
+        'TRANSACTION_HISTORY_LIMIT'
+    ];
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+}
+
+async function getTokenBalances(ownerAddress, provider) {
+    const IERC20_ABI = [
+        "function balanceOf(address) view returns (uint256)",
+        "function decimals() view returns (uint8)"
+    ];
+    
+    const balances = {};
+    
+    // Check USDT balance
+    const usdtContract = new hre.ethers.Contract(
+        process.env.USDT_CONTRACT_ADDRESS,
+        IERC20_ABI,
+        provider
+    );
+    const usdtDecimals = await usdtContract.decimals();
+    const usdtBalance = await usdtContract.balanceOf(ownerAddress);
+    balances.usdt = hre.ethers.formatUnits(usdtBalance, usdtDecimals);
+
+    // Check USDC balance
+    const usdcContract = new hre.ethers.Contract(
+        process.env.USDC_CONTRACT_ADDRESS,
+        IERC20_ABI,
+        provider
+    );
+    const usdcDecimals = await usdcContract.decimals();
+    const usdcBalance = await usdcContract.balanceOf(ownerAddress);
+    balances.usdc = hre.ethers.formatUnits(usdcBalance, usdcDecimals);
+
+    return balances;
+}
+
+async function validateBalance(params = {}, options = {}) {
     try {
-        if (!params.tokenId) {
-            throw new Error("Token ID is required");
-        }
+        validateEnvVariables();
 
-        // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        const validationParams = {
+            tokenId: params.tokenId || process.env.VALIDATE_TOKEN_ID,
+            requiredAmount: params.requiredAmount || process.env.VALIDATE_REQUIRED_AMOUNT,
+            operation: params.operation || process.env.VALIDATE_OPERATION_TYPE
+        };
 
-        // Get token details and balance
-        const balanceInfo = await checkBalance(params.tokenId, {
-            includeHistory: options.includeHistory,
-            includeEvents: options.includeEvents
-        });
+        const validationOptions = {
+            includeHistory: options.includeHistory || process.env.VALIDATE_INCLUDE_HISTORY === 'true',
+            includeEvents: options.includeEvents || process.env.VALIDATE_INCLUDE_EVENTS === 'true',
+            eventId: options.eventId || process.env.VALIDATE_EVENT_ID
+        };
+
+        const wavexNFT = await hre.ethers.getContractFactory("WaveXNFTV2")
+            .then(factory => factory.attach(process.env.WAVEX_NFT_V2_ADDRESS));
+
+        const balanceInfo = await checkBalance(validationParams.tokenId, validationOptions);
+        const tokenBalances = await getTokenBalances(balanceInfo.owner, hre.ethers.provider);
 
         const validationResult = {
-            tokenId: params.tokenId,
-            currentBalance: balanceInfo.balance,
+            tokenId: validationParams.tokenId,
+            balances: tokenBalances,
             timestamp: new Date().toISOString(),
             checks: {},
             valid: true,
             warnings: []
         };
 
-        // Check if token exists
+        // Validate token existence
         validationResult.checks.exists = true;
 
-        // Check owner
+        // Validate owner
         validationResult.checks.owner = {
             address: balanceInfo.owner,
             valid: true
         };
 
-        // Check required amount if specified
-        if (params.requiredAmount) {
-            const required = hre.ethers.parseEther(params.requiredAmount);
-            const current = hre.ethers.parseEther(balanceInfo.balance);
-            
+        // Check required amount
+        if (validationParams.requiredAmount) {
+            const required = parseFloat(validationParams.requiredAmount);
+            const available = {
+                usdt: parseFloat(tokenBalances.usdt),
+                usdc: parseFloat(tokenBalances.usdc)
+            };
+
             validationResult.checks.requiredAmount = {
-                required: params.requiredAmount,
-                sufficient: current >= required
+                required: validationParams.requiredAmount,
+                sufficient: available.usdt >= required || available.usdc >= required
             };
 
             if (!validationResult.checks.requiredAmount.sufficient) {
                 validationResult.valid = false;
                 validationResult.warnings.push(
-                    `Insufficient balance. Required: ${params.requiredAmount} ETH, Available: ${balanceInfo.balance} ETH`
+                    `Insufficient balance. Required: ${validationParams.requiredAmount} USD, ` +
+                    `Available: USDT ${tokenBalances.usdt}, USDC ${tokenBalances.usdc}`
                 );
             }
         }
 
-        // Operation-specific validations
-        if (params.operation) {
-            switch (params.operation.toUpperCase()) {
+        // Operation validations
+        if (validationParams.operation) {
+            switch (validationParams.operation.toUpperCase()) {
                 case 'PAYMENT':
-                    // Check if token is allowed for payments
                     const paused = await wavexNFT.paused();
                     validationResult.checks.payment = {
                         allowed: !paused,
                         contractPaused: paused
                     };
-
-                    if (paused) {
-                        validationResult.valid = false;
-                        validationResult.warnings.push("Contract is paused, payments not allowed");
-                    }
                     break;
-
                 case 'EVENT':
-                    // Check if token has any conflicting events
                     if (balanceInfo.events) {
                         validationResult.checks.events = {
                             count: balanceInfo.events.length,
                             hasConflicts: false
                         };
-
-                        if (options.eventId && balanceInfo.events.includes(options.eventId)) {
-                            validationResult.checks.events.hasConflicts = true;
-                            validationResult.valid = false;
-                            validationResult.warnings.push("Token already has access to this event");
-                        }
                     }
                     break;
-
-                default:
-                    validationResult.warnings.push(`Unknown operation type: ${params.operation}`);
             }
         }
 
-        // Add transaction history analysis if requested
-        if (options.includeHistory && balanceInfo.transactions) {
-            const analysis = analyzeTransactionHistory(balanceInfo.transactions);
-            validationResult.analysis = analysis;
-
-            // Add warnings based on analysis
-            if (analysis.unusualActivity) {
-                validationResult.warnings.push("Unusual transaction activity detected");
-            }
+        // Transaction history analysis
+        if (validationOptions.includeHistory && balanceInfo.transactions) {
+            validationResult.analysis = analyzeTransactionHistory(balanceInfo.transactions);
         }
 
         return validationResult;
@@ -121,70 +147,70 @@ async function validateBalance(params, options = {}) {
     }
 }
 
-/**
- * Analyzes transaction history for patterns and risks
- * @param {Array<Object>} transactions Transaction history
- * @returns {Object} Analysis results
- */
 function analyzeTransactionHistory(transactions) {
     const analysis = {
         totalTransactions: transactions.length,
         topUps: 0,
         payments: 0,
-        totalTopUpAmount: 0,
-        totalSpentAmount: 0,
-        averageTransactionSize: 0,
-        unusualActivity: false,
+        totalTopUpAmount: {
+            usdt: 0,
+            usdc: 0
+        },
+        totalSpentAmount: {
+            usdt: 0,
+            usdc: 0
+        },
         lastTransaction: null
     };
 
-    if (transactions.length === 0) {
-        return analysis;
-    }
+    if (transactions.length === 0) return analysis;
 
-    // Analyze transactions
     transactions.forEach(tx => {
-        const amount = parseFloat(tx.amount);
+        const amount = parseFloat(tx.amount || 0);
+        // Safely handle token type checking
+        const tokenType = tx.token ? tx.token.toString().toLowerCase() : 'unknown';
+
         if (tx.type === 'TOPUP') {
             analysis.topUps++;
-            analysis.totalTopUpAmount += amount;
+            if (tokenType === process.env.USDT_CONTRACT_ADDRESS.toLowerCase()) {
+                analysis.totalTopUpAmount.usdt += amount;
+            } else if (tokenType === process.env.USDC_CONTRACT_ADDRESS.toLowerCase()) {
+                analysis.totalTopUpAmount.usdc += amount;
+            }
         } else if (tx.type === 'PAYMENT') {
             analysis.payments++;
-            analysis.totalSpentAmount += amount;
+            if (tokenType === process.env.USDT_CONTRACT_ADDRESS.toLowerCase()) {
+                analysis.totalSpentAmount.usdt += amount;
+            } else if (tokenType === process.env.USDC_CONTRACT_ADDRESS.toLowerCase()) {
+                analysis.totalSpentAmount.usdc += amount;
+            }
         }
     });
 
-    // Calculate averages
-    analysis.averageTransactionSize = 
-        (analysis.totalTopUpAmount + analysis.totalSpentAmount) / 
-        analysis.totalTransactions;
-
-    // Get last transaction
-    analysis.lastTransaction = transactions[transactions.length - 1];
-
-    // Check for unusual patterns
-    const paymentFrequency = analysis.payments / Math.max(1, 
-        (Date.now() - new Date(transactions[0].timestamp).getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    analysis.unusualActivity = 
-        paymentFrequency > 10 || // More than 10 payments per day
-        analysis.averageTransactionSize > 1000; // Average transaction > 1000 ETH
+    // Get the last transaction if available
+    if (transactions.length > 0) {
+        const lastTx = transactions[transactions.length - 1];
+        analysis.lastTransaction = {
+            timestamp: lastTx.timestamp || new Date().toISOString(),
+            merchant: lastTx.merchant || "0x0000000000000000000000000000000000000000",
+            amount: lastTx.amount || "0",
+            type: lastTx.type || "UNKNOWN",
+            token: lastTx.token || "UNKNOWN",
+            metadata: lastTx.metadata || ""
+        };
+    }
 
     return analysis;
 }
 
-/**
- * Batch validates balances for multiple tokens
- * @param {Array<Object>} validations Array of validation parameters
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Batch validation results
- */
-async function batchValidateBalance(validations, options = {}) {
+async function batchValidateBalance(validations = [], options = {}) {
     try {
-        if (!Array.isArray(validations) || validations.length === 0) {
-            throw new Error("At least one validation is required");
-        }
+        const batchSize = parseInt(process.env.DEFAULT_BATCH_SIZE) || 1;
+        validations = validations.length > 0 ? validations : [{
+            tokenId: process.env.VALIDATE_TOKEN_ID,
+            requiredAmount: process.env.VALIDATE_REQUIRED_AMOUNT,
+            operation: process.env.VALIDATE_OPERATION_TYPE
+        }];
 
         const results = await Promise.allSettled(
             validations.map(params =>
@@ -202,29 +228,39 @@ async function batchValidateBalance(validations, options = {}) {
             )
         );
 
-        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success);
-        const valid = successful.filter(r => r.value.details.valid);
-
         return {
             totalValidations: validations.length,
-            successfulValidations: successful.length,
-            validBalances: valid.length,
-            invalidBalances: successful.length - valid.length,
-            failedValidations: results.length - successful.length,
+            successfulValidations: results.filter(r => r.status === 'fulfilled' && r.value.success).length,
             timestamp: new Date().toISOString(),
-            results: results.map(r => 
-                r.status === 'fulfilled' ? r.value : {
-                    tokenId: r.reason.tokenId,
-                    success: false,
-                    error: r.reason.message
-                }
-            )
+            results: results.map(r => r.status === 'fulfilled' ? r.value : {
+                tokenId: r.reason?.tokenId,
+                success: false,
+                error: r.reason?.message || 'Unknown error'
+            })
         };
-
     } catch (error) {
         console.error("Error in batch validation:", error);
         throw error;
     }
+}
+
+async function main() {
+    try {
+        const result = await validateBalance();
+        console.log(JSON.stringify(result, null, 2));
+    } catch (error) {
+        console.error("Error:", error.message);
+        process.exit(1);
+    }
+}
+
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {

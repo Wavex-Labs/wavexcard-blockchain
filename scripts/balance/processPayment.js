@@ -1,166 +1,151 @@
-//   Terminal command: npx hardhat run scripts\balance\processPayment.js --network polygonAmoy
+require('dotenv').config();
+const ethers = require('ethers');
 const hre = require("hardhat");
-const { checkBalance } = require('./checkBalance');
 
-/**
- * Processes a payment from a token's balance
- * @param {Object} params Payment parameters
- * @param {string|number} params.tokenId Token ID to process payment from
- * @param {string} params.amount Amount to charge in USD
- * @param {string} params.metadata Payment metadata (e.g., merchant reference, items)
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Payment result
- */
-async function processPayment(params, options = {}) {
+async function getGasPrice(provider) {
+    const gasPrice = await provider.getFeeData();
+    return {
+        maxFeePerGas: gasPrice.maxFeePerGas,
+        maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas
+    };
+}
+
+async function processPayment(params) {
     try {
-        if (!params.tokenId || !params.amount) {
-            throw new Error("Token ID and amount are required");
-        }
+        // Connect to the network
+        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+        console.log("Connected wallet:", wallet.address);
 
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        const contractABI = [
+            "function tokenBalance(uint256 tokenId) view returns (uint256)",
+            "function authorizedMerchants(address merchant) view returns (bool)",
+            "function processPayment(uint256 tokenId, uint256 amount, string memory metadata) returns (bool)"
+        ];
+        const contract = new ethers.Contract(process.env.WAVEX_NFT_V2_ADDRESS, contractABI, wallet);
 
-        // Check if caller is authorized merchant
-        const signer = wavexNFT.signer;
-        const signerAddress = await signer.getAddress();
-        const isAuthorized = await wavexNFT.authorizedMerchants(signerAddress);
+        // Get current balance
+        console.log("Getting token balance...");
+        const tokenBalance = await contract.tokenBalance(params.tokenId);
+        console.log(`Current balance (raw): ${tokenBalance.toString()}`);
+        const formattedBalance = ethers.formatUnits(tokenBalance, 6);
+        console.log(`Current balance: ${formattedBalance} USDT`);
 
+        // Convert payment amount to wei
+        const paymentAmount = ethers.parseUnits(params.amount.toString(), 6);
+        console.log(`Payment amount: ${params.amount} USDT (${paymentAmount.toString()} wei)`);
+
+        // Check balance
+        if (tokenBalance < paymentAmount) {
+            throw new Error(`Insufficient balance. Required: ${params.amount} USDT, Available: ${formattedBalance} USDT`);
+        }
+
+        // Check merchant authorization
+        const isAuthorized = await contract.authorizedMerchants(wallet.address);
+        console.log("Merchant authorization:", isAuthorized);
         if (!isAuthorized) {
-            throw new Error("Caller is not an authorized merchant");
+            throw new Error("Wallet is not an authorized merchant");
         }
 
-        // Get initial balance
-        const initialBalance = await checkBalance(params.tokenId);
-        const amount = hre.ethers.parseEther(params.amount);
-
-        // Validate sufficient balance
-        if (hre.ethers.parseEther(initialBalance.balance) < amount) {
-            throw new Error(
-                `Insufficient balance. Required: ${params.amount} ETH, Available: ${initialBalance.balance} ETH`
-            );
-        }
+        // Get current gas prices
+        const gasPrices = await getGasPrice(provider);
+        console.log("Current gas prices:", {
+            maxFeePerGas: ethers.formatUnits(gasPrices.maxFeePerGas, 'gwei'),
+            maxPriorityFeePerGas: ethers.formatUnits(gasPrices.maxPriorityFeePerGas, 'gwei')
+        });
 
         // Process payment
-        console.log(`Processing payment of ${params.amount} ETH from token ${params.tokenId}...`);
-        const tx = await wavexNFT.processPayment(
+        console.log(`Processing payment of ${params.amount} USDT from token ${params.tokenId}...`);
+
+        // Estimate gas
+        const gasLimit = await contract.processPayment.estimateGas(
             params.tokenId,
-            amount,
+            paymentAmount,
+            params.metadata || ""
+        );
+
+        console.log(`Estimated gas limit: ${gasLimit.toString()}`);
+
+        const tx = await contract.processPayment(
+            params.tokenId,
+            paymentAmount,
             params.metadata || "",
             {
-                gasLimit: options.gasLimit
+                maxFeePerGas: gasPrices.maxFeePerGas,
+                maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas,
+                gasLimit: Math.floor(gasLimit.toString() * 1.2) // Add 20% buffer
             }
         );
 
+        console.log(`Transaction submitted: ${tx.hash}`);
         const receipt = await tx.wait();
+        console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
 
         // Get updated balance
-        const updatedBalance = await checkBalance(params.tokenId);
+        const updatedBalance = await contract.tokenBalance(params.tokenId);
+        const formattedUpdatedBalance = ethers.formatUnits(updatedBalance, 6);
 
-        // Find and parse relevant events
-        const balanceUpdatedLog = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('BalanceUpdated')
-        );
-
-        const transactionRecordedLog = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('TransactionRecorded')
-        );
-
-        let eventData = {};
-        if (balanceUpdatedLog) {
-            const parsedLog = wavexNFT.interface.parseLog(balanceUpdatedLog);
-            eventData.balance = {
-                tokenId: parsedLog.args.tokenId.toString(),
-                newBalance: hre.ethers.formatEther(parsedLog.args.newBalance),
-                updateType: parsedLog.args.updateType
-            };
-        }
-
-        if (transactionRecordedLog) {
-            const parsedLog = wavexNFT.interface.parseLog(transactionRecordedLog);
-            eventData.transaction = {
-                tokenId: parsedLog.args.tokenId.toString(),
-                transactionType: parsedLog.args.transactionType,
-                amount: hre.ethers.formatEther(parsedLog.args.amount)
-            };
-        }
-
-        return {
+        // Prepare transaction details
+        const txDetails = {
+            success: true,
             tokenId: params.tokenId,
             amount: params.amount,
-            merchant: signerAddress,
+            merchant: wallet.address,
             metadata: params.metadata,
-            initialBalance: initialBalance.balance,
-            newBalance: updatedBalance.balance,
-            transactionHash: receipt.transactionHash,
-            events: eventData,
+            initialBalance: formattedBalance,
+            newBalance: formattedUpdatedBalance,
+            transactionHash: receipt.hash,
+            blockNumber: receipt.blockNumber,
             timestamp: new Date().toISOString()
         };
 
+        // Add gas information if available
+        if (receipt.gasUsed) {
+            txDetails.gasUsed = receipt.gasUsed.toString();
+        }
+        if (receipt.effectiveGasPrice) {
+            txDetails.effectiveGasPrice = receipt.effectiveGasPrice.toString();
+        }
+
+        return txDetails;
+
     } catch (error) {
         console.error("Error processing payment:", error);
-        throw error;
+        return {
+            success: false,
+            error: error.message,
+            details: error.stack
+        };
     }
 }
 
-/**
- * Processes multiple payments in batch
- * @param {Array<Object>} payments Array of payment operations
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Batch results
- */
-async function batchProcessPayments(payments, options = {}) {
+async function main() {
     try {
-        if (!Array.isArray(payments) || payments.length === 0) {
-            throw new Error("At least one payment operation is required");
-        }
-
-        const results = await Promise.allSettled(
-            payments.map(params =>
-                processPayment(params, options)
-                    .then(result => ({
-                        tokenId: params.tokenId,
-                        success: true,
-                        details: result
-                    }))
-                    .catch(error => ({
-                        tokenId: params.tokenId,
-                        success: false,
-                        error: error.message
-                    }))
-            )
-        );
-
-        // Calculate totals
-        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success);
-        const totalAmount = successful.reduce(
-            (sum, r) => sum + parseFloat(r.value.details.amount),
-            0
-        );
-
-        return {
-            totalOperations: payments.length,
-            successfulPayments: successful.length,
-            failedPayments: results.length - successful.length,
-            totalAmount: totalAmount.toString(),
-            timestamp: new Date().toISOString(),
-            results: results.map(r => 
-                r.status === 'fulfilled' ? r.value : {
-                    tokenId: r.reason.tokenId,
-                    success: false,
-                    error: r.reason.message
-                }
-            )
+        const payment = {
+            tokenId: process.env.PROCESS_PAYMENT_TOKEN_ID || "1",
+            amount: process.env.PROCESS_PAYMENT_AMOUNT || "100",
+            metadata: process.env.PROCESS_PAYMENT_METADATA || "Test payment"
         };
-
+        
+        console.log("Starting payment process with parameters:", payment);
+        const result = await processPayment(payment);
+        console.log(JSON.stringify(result, null, 2));
     } catch (error) {
-        console.error("Error in batch payment processing:", error);
-        throw error;
+        console.error("Error:", error.message);
+        process.exit(1);
     }
+}
+
+if (require.main === module) {
+    main()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {
-    processPayment,
-    batchProcessPayments
+    processPayment
 };

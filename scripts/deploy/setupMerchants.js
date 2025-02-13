@@ -1,3 +1,4 @@
+// Terminal Command: npx hardhat run scripts/deploy/setupMerchants.js --network polygonAmoy
 const { ethers } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
@@ -37,6 +38,11 @@ async function main() {
     const wavexNFT = await getDeployedContract(network.name);
     console.log("Contract loaded at:", await wavexNFT.getAddress());
 
+    // Get gas price settings
+    const feeData = await ethers.provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas || feeData.gasPrice;
+    const maxPriorityFeePerGas = ethers.parseUnits("31.5", "gwei"); // Increased for Polygon Amoy
+
     // Load merchants from configuration
     const merchants = await loadMerchants();
     console.log(`Found ${merchants.length} merchants to authorize`);
@@ -49,7 +55,11 @@ async function main() {
         
         if (!isAuthorized) {
           console.log(`Authorizing merchant: ${merchant.address}`);
-          const tx = await wavexNFT.authorizeMerchant(merchant.address);
+          const tx = await wavexNFT.authorizeMerchant(merchant.address, {
+            maxFeePerGas,
+            maxPriorityFeePerGas,
+            gasLimit: 300000 // Safe gas limit for merchant authorization
+          });
           await tx.wait();
           console.log(`Merchant ${merchant.address} authorized successfully`);
         } else {

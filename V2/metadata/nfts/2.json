@@ -1,7 +1,7 @@
 {
-  "name": "WaveX Gold Card #2",
-  "description": "WaveX Gold membership card with 6% discount",
-  "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD",
+  "name": "WaveX EventBrite Card #2",
+  "description": "WaveX EventBrite membership card with 0% discount",
+  "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb",
   "attributes": [
     {
       "trait_type": "Token ID",
@@ -9,30 +9,30 @@
     },
     {
       "trait_type": "Template",
-      "value": "Gold"
+      "value": "EventBrite"
     },
     {
       "trait_type": "Balance",
-      "value": "$3000.0 USD"
+      "value": "$0.0 USD"
     },
     {
       "trait_type": "Discount",
-      "value": "6%"
+      "value": "0%"
     },
     {
       "trait_type": "VIP Status",
-      "value": "Yes"
+      "value": "No"
     },
     {
       "trait_type": "Valid Until",
-      "value": "2027-02-11T21:09:43.645Z"
+      "value": "2027-02-12T02:02:10.652Z"
     }
   ],
   "properties": {
     "type": "NFT",
-    "createdAt": "2025-02-11T21:09:43.651Z",
+    "createdAt": "2025-02-12T02:02:10.673Z",
     "tokenId": "2",
-    "templateId": "1",
+    "templateId": "4",
     "owner": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5"
   },
   "platforms": {
@@ -41,35 +41,34 @@
     },
     "nftVisual": {
       "properties": {
-        "tier": "Gold",
+        "tier": "EventBrite",
         "benefits": [
-          "6% Discount on all purchases",
-          "Priority Support",
-          "Member Events Access"
+          "Event Access",
+          "24/7 Support"
         ],
-        "balance": "3000.0",
+        "balance": "0.0",
         "cardDesign": {
-          "primaryColor": "#FFD700",
-          "textColor": "#000000",
-          "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD"
+          "primaryColor": "#4A90E2",
+          "textColor": "#FFFFFF",
+          "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb"
         }
       }
     },
     "appleWallet": {
       "formatVersion": 1,
-      "passTypeIdentifier": "pass.com.wavex.gold",
+      "passTypeIdentifier": "pass.com.wavex.eventbrite",
       "serialNumber": "TOKEN-2",
       "teamIdentifier": "JHQFQ72XMR",
       "organizationName": "WaveX",
       "logoText": "WaveX",
-      "foregroundColor": "#000000",
-      "backgroundColor": "#FFD700",
+      "foregroundColor": "#FFFFFF",
+      "backgroundColor": "#4A90E2",
       "storeCard": {
         "primaryFields": [
           {
             "key": "balance",
             "label": "BALANCE",
-            "value": "3000.0",
+            "value": "0.0",
             "currencyCode": "USD"
           }
         ],
@@ -77,56 +76,50 @@
           {
             "key": "tier",
             "label": "TIER",
-            "value": "Gold"
+            "value": "EventBrite"
           },
           {
             "key": "discount",
             "label": "DISCOUNT",
-            "value": "6%"
+            "value": "0%"
           }
         ],
         "backFields": [
           {
             "key": "validUntil",
             "label": "VALID UNTIL",
-            "value": "2027-02-11T21:09:43.645Z"
+            "value": "2027-02-12T02:02:10.652Z"
           },
           {
             "key": "benefit0",
             "label": "BENEFIT",
-            "value": "6% Discount on all purchases"
+            "value": "Event Access"
           },
           {
             "key": "benefit1",
             "label": "BENEFIT",
-            "value": "Priority Support"
-          },
-          {
-            "key": "benefit2",
-            "label": "BENEFIT",
-            "value": "Member Events Access"
+            "value": "24/7 Support"
           }
         ]
       }
     },
     "prepaidCard": {
-      "baseBalance": "3000.0",
-      "price": "3000.0",
-      "discount": "6",
-      "isVIP": true,
-      "validUntil": "2027-02-11T21:09:43.645Z",
+      "baseBalance": "0.0",
+      "price": "0.0",
+      "discount": "0",
+      "isVIP": false,
+      "validUntil": "2027-02-12T02:02:10.652Z",
       "style": {
         "colors": {
-          "primary": "#FFD700",
-          "text": "#000000"
+          "primary": "#4A90E2",
+          "text": "#FFFFFF"
         },
-        "image": "ipfs://QmZ8u69Hjwuxe7XSB4p344DaCtPoHAu9D6v3QE6cnggLRD"
+        "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb"
       },
       "features": {
         "benefits": [
-          "6% Discount on all purchases",
-          "Priority Support",
-          "Member Events Access"
+          "Event Access",
+          "24/7 Support"
         ],
         "transferable": true,
         "rechargeable": true,
