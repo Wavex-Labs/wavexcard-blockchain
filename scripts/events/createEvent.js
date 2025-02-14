@@ -1,97 +1,228 @@
 // scripts/events/createEvent.js
+require('dotenv').config();
 const hre = require("hardhat");
-const { EVENT_TYPES, getEventMetadata } = require('../config/eventConfig');
-const { uploadToIPFS } = require('../utils/pinataUtils');
+const { EVENT_TYPES, EVENT_METADATA, getEventMetadata } = require('../../config/eventConfig');
+const { PinataManager } = require('../utils/pinataUtils');
+const { gasManager } = require('../utils/gasUtils');
+
+// Constants from environment
+const USDT_ADDRESS = process.env.USDT_CONTRACT_ADDRESS;
+const USDC_ADDRESS = process.env.USDC_CONTRACT_ADDRESS;
+const CONFIRMATIONS = 2;
+
+/**
+ * Converts USD amount to token amount (considering 6 decimals for USDC/USDT)
+ * @param {string} usdAmount Amount in USD
+ * @returns {BigInt} Amount in token decimals
+ */
+function convertUSDToTokenAmount(usdAmount) {
+    return hre.ethers.parseUnits(usdAmount, 6);
+}
+
+/**
+ * Validates environment variables
+ */
+function validateEnvVariables() {
+    const required = [
+        'WAVEX_NFT_V2_ADDRESS',
+        'PRIVATE_KEY',
+        'RPC_URL',
+        'CREATE_EVENT_NAME',
+        'CREATE_EVENT_PRICE',
+        'CREATE_EVENT_CAPACITY',
+        'CREATE_EVENT_TYPE',
+        'USDT_CONTRACT_ADDRESS',
+        'USDC_CONTRACT_ADDRESS',
+        'PINATA_API_KEY',
+        'PINATA_API_SECRET',
+        'PINATA_JWT'
+    ];
+
+    const missing = required.filter(key => !process.env[key]);
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+
+    if (isNaN(parseFloat(process.env.CREATE_EVENT_PRICE))) {
+        throw new Error('CREATE_EVENT_PRICE must be a valid USD amount');
+    }
+
+    if (isNaN(parseInt(process.env.CREATE_EVENT_CAPACITY)) || parseInt(process.env.CREATE_EVENT_CAPACITY) <= 0) {
+        throw new Error('CREATE_EVENT_CAPACITY must be a positive integer');
+    }
+
+    const eventType = parseInt(process.env.CREATE_EVENT_TYPE);
+    if (isNaN(eventType) || !Object.values(EVENT_TYPES).includes(eventType)) {
+        throw new Error('CREATE_EVENT_TYPE must be a valid event type');
+    }
+}
 
 /**
  * Creates a new event on the WaveX platform
- * @param {Object} options Event creation options
- * @param {string} options.name Event name
- * @param {string} options.price Event price in ETH
- * @param {number} options.capacity Maximum event capacity
- * @param {number} options.eventType Event type (0: Standard, 1: VIP, 2: Exclusive)
- * @param {Object} options.metadata Additional metadata options
- * @returns {Promise<Object>} Created event details
  */
-async function createEvent(options = {}) {
+async function createEvent() {
     try {
-        // Validate required parameters
-        if (!options.name || !options.price || !options.capacity) {
-            throw new Error("Missing required parameters: name, price, and capacity are required");
-        }
+        validateEnvVariables();
 
-        // Generate and upload metadata
-        const metadata = await getEventMetadata(Date.now(), {
-            name: options.name,
-            description: options.metadata?.description,
-            image: options.metadata?.image,
+        // Initialize Pinata
+        const pinata = new PinataManager();
+        await pinata.testAuthentication();
+
+        // Setup provider and wallet
+        const [signer] = await hre.ethers.getSigners();
+        console.log("Creating event with address:", signer.address);
+
+        // Convert USD price to token amount
+        const priceInTokens = convertUSDToTokenAmount(process.env.CREATE_EVENT_PRICE);
+        console.log(`Event price: $${process.env.CREATE_EVENT_PRICE} USD (${priceInTokens.toString()} tokens)`);
+
+        // Generate metadata
+        console.log("Generating event metadata...");
+        const eventTypeKey = Object.keys(EVENT_TYPES).find(
+            key => EVENT_TYPES[key] === parseInt(process.env.CREATE_EVENT_TYPE)
+        );
+
+        const metadata = {
+            name: process.env.CREATE_EVENT_NAME,
+            description: process.env.CREATE_EVENT_DESCRIPTION || `Event: ${process.env.CREATE_EVENT_NAME}`,
+            image: process.env.CREATE_EVENT_IMAGE || EVENT_METADATA.defaultImage,
             attributes: [
                 {
                     trait_type: "Type",
-                    value: Object.keys(EVENT_TYPES)[options.eventType || 0]
+                    value: eventTypeKey
                 },
                 {
                     trait_type: "Capacity",
-                    value: options.capacity.toString()
+                    value: process.env.CREATE_EVENT_CAPACITY
                 },
                 {
                     trait_type: "Price",
-                    value: options.price.toString()
+                    value: `$${process.env.CREATE_EVENT_PRICE} USD`
                 },
-                ...(options.metadata?.attributes || [])
+                {
+                    trait_type: "Payment Tokens",
+                    value: "USDC, USDT"
+                }
             ]
-        });
+        };
 
-        const metadataURI = await uploadToIPFS(JSON.stringify(metadata));
+        // Upload metadata to IPFS
+        console.log("Uploading metadata to IPFS...");
+        const metadataURI = await pinata.uploadJSON(
+            metadata,
+            `event-${Date.now()}-${process.env.CREATE_EVENT_NAME.replace(/\s+/g, '-').toLowerCase()}`
+        );
+        console.log("Metadata uploaded:", metadataURI);
 
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        const contract = WaveXNFT.attach(process.env.WAVEX_NFT_V2_ADDRESS);
 
-        // Create event on-chain
-        const tx = await wavexNFT.createEvent(
-            options.name,
-            hre.ethers.parseEther(options.price.toString()),
-            options.capacity,
-            options.eventType || EVENT_TYPES.STANDARD,
+        // Get gas configuration
+        const gasConfig = await gasManager.getGasConfig();
+
+        // Estimate gas with safety margin
+        console.log("Estimating gas with safety margin...");
+        const gasLimit = await gasManager.estimateGasWithMargin(
+            contract,
+            'createEvent',
+            [
+                process.env.CREATE_EVENT_NAME,
+                priceInTokens,
+                parseInt(process.env.CREATE_EVENT_CAPACITY),
+                parseInt(process.env.CREATE_EVENT_TYPE)
+            ]
+        );
+
+        // Create event transaction
+        console.log(`Creating event: ${process.env.CREATE_EVENT_NAME}...`);
+        const tx = await contract.createEvent(
+            process.env.CREATE_EVENT_NAME,
+            priceInTokens,
+            parseInt(process.env.CREATE_EVENT_CAPACITY),
+            parseInt(process.env.CREATE_EVENT_TYPE),
             {
-                gasLimit: options.gasLimit
+                ...gasConfig,
+                gasLimit
             }
         );
 
-        console.log(`Creating event: ${options.name}...`);
-        const receipt = await tx.wait();
-        
-        // Parse event ID from logs
-        const eventCreatedLog = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('EventCreated')
-        );
-        
-        const eventId = eventCreatedLog ? 
-            wavexNFT.interface.parseLog(eventCreatedLog).args.eventId : 
-            null;
+        console.log(`Transaction submitted: ${tx.hash}`);
+        const receipt = await tx.wait(CONFIRMATIONS);
+        console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
 
-        console.log(`Event created successfully! Transaction: ${receipt.transactionHash}`);
-        console.log(`Event ID: ${eventId}`);
+        // Parse event from logs
+        let eventId = null;
+        for (const log of receipt.logs) {
+            try {
+                const parsedLog = contract.interface.parseLog({
+                    topics: log.topics,
+                    data: log.data
+                });
+                
+                if (parsedLog.name === 'EventCreated') {
+                    eventId = parsedLog.args.eventId;
+                    break;
+                }
+            } catch (e) {
+                continue; // Skip logs that can't be parsed
+            }
+        }
 
-        // Save event details to local storage
+        if (!eventId) {
+            console.warn("Warning: EventCreated event not found in logs");
+        }
+
+        // Create response object
         const eventDetails = {
-            id: eventId,
-            name: options.name,
-            price: options.price,
-            capacity: options.capacity,
-            eventType: options.eventType || EVENT_TYPES.STANDARD,
+            success: true,
+            id: eventId ? eventId.toString() : null,
+            name: process.env.CREATE_EVENT_NAME,
+            priceUSD: process.env.CREATE_EVENT_PRICE,
+            priceTokens: priceInTokens.toString(),
+            capacity: process.env.CREATE_EVENT_CAPACITY,
+            eventType: eventTypeKey,
             metadataURI: `ipfs://${metadataURI}`,
+            gatewayURL: `https://gateway.pinata.cloud/ipfs/${metadataURI}`,
+            supportedTokens: {
+                USDC: USDC_ADDRESS,
+                USDT: USDT_ADDRESS
+            },
             createdAt: new Date().toISOString(),
-            transactionHash: receipt.transactionHash
+            transactionHash: receipt.hash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed.toString(),
+            gasConfig: {
+                maxFeePerGas: gasConfig.maxFeePerGas.toString(),
+                maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas.toString(),
+                gasLimit: gasLimit.toString()
+            }
         };
 
+        console.log("Event created successfully:", eventDetails);
         return eventDetails;
+
     } catch (error) {
         console.error("Error creating event:", error);
-        throw error;
+        return {
+            success: false,
+            error: error.message,
+            details: error.stack
+        };
     }
+}
+
+// Execute if called directly
+if (require.main === module) {
+    createEvent()
+        .then(result => {
+            console.log(JSON.stringify(result, null, 2));
+            process.exit(0);
+        })
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {

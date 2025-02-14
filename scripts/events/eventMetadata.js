@@ -1,8 +1,19 @@
 // scripts/events/eventMetadata.js
-const { EVENT_TYPES, EVENT_CONFIG } = require('../config/eventConfig');
-const { uploadToIPFS } = require('../utils/pinataUtils');
+require('dotenv').config();
+const { EVENT_TYPES, EVENT_CONFIG } = require('../../config/eventConfig');
+const { PinataManager } = require('../utils/pinataUtils');
+const { gasManager } = require('../utils/gasUtils');
 const path = require('path');
 const fs = require('fs').promises;
+
+// Environment-driven configuration
+const METADATA_CONFIG = {
+    basePath: process.env.METADATA_BASE_PATH || 'data/metadata',
+    defaultImage: process.env.DEFAULT_EVENT_IMAGE || "ipfs://QmDefaultEventImageHash",
+    defaultDescription: process.env.DEFAULT_EVENT_DESCRIPTION || "A WaveX Event",
+    requiredFields: ['name', 'description', 'image'],
+    requiredAttributes: ['Type', 'Capacity', 'Price']
+};
 
 /**
  * Validates event metadata structure
@@ -10,8 +21,7 @@ const fs = require('fs').promises;
  * @throws {Error} If metadata is invalid
  */
 function validateEventMetadata(metadata) {
-    const requiredFields = ['name', 'description', 'image'];
-    const missingFields = requiredFields.filter(field => !metadata[field]);
+    const missingFields = METADATA_CONFIG.requiredFields.filter(field => !metadata[field]);
     
     if (missingFields.length > 0) {
         throw new Error(`Missing required metadata fields: ${missingFields.join(', ')}`);
@@ -21,9 +31,8 @@ function validateEventMetadata(metadata) {
         throw new Error('Metadata must include attributes array');
     }
 
-    const requiredAttributes = ['Type', 'Capacity', 'Price'];
     const attributeTypes = metadata.attributes.map(attr => attr.trait_type);
-    const missingAttributes = requiredAttributes.filter(
+    const missingAttributes = METADATA_CONFIG.requiredAttributes.filter(
         attr => !attributeTypes.includes(attr)
     );
 
@@ -41,8 +50,8 @@ function validateEventMetadata(metadata) {
 async function generateEventMetadata(event, options = {}) {
     const metadata = {
         name: event.name,
-        description: options.description || `${event.name} - A WaveX Event`,
-        image: options.image || "ipfs://QmDefaultEventImageHash",
+        description: options.description || `${event.name} - ${METADATA_CONFIG.defaultDescription}`,
+        image: options.image || METADATA_CONFIG.defaultImage,
         attributes: [
             {
                 trait_type: "Type",
@@ -54,7 +63,7 @@ async function generateEventMetadata(event, options = {}) {
             },
             {
                 trait_type: "Price",
-                value: event.price.toString()
+                value: `$${event.price.toString()} USD`
             },
             {
                 trait_type: "Status",
@@ -65,11 +74,12 @@ async function generateEventMetadata(event, options = {}) {
         properties: {
             eventId: event.id,
             createdAt: new Date().toISOString(),
+            network: process.env.NETWORK || 'polygonAmoy',
+            contractAddress: process.env.WAVEX_NFT_V2_ADDRESS,
             ...(options.properties || {})
         }
     };
 
-    // Validate metadata
     validateEventMetadata(metadata);
     return metadata;
 }
@@ -82,22 +92,30 @@ async function generateEventMetadata(event, options = {}) {
  */
 async function saveEventMetadata(eventId, metadata) {
     try {
-        // Validate metadata first
         validateEventMetadata(metadata);
 
+        // Initialize Pinata
+        const pinata = new PinataManager();
+        await pinata.testAuthentication();
+
         // Ensure metadata directory exists
-        const metadataDir = path.join(process.cwd(), EVENT_CONFIG.metadataPath);
+        const metadataDir = path.join(process.cwd(), METADATA_CONFIG.basePath);
         await fs.mkdir(metadataDir, { recursive: true });
 
         // Save metadata locally
         const localPath = path.join(metadataDir, `${eventId}.json`);
         await fs.writeFile(localPath, JSON.stringify(metadata, null, 2));
 
-        // Upload to IPFS
-        const ipfsHash = await uploadToIPFS(JSON.stringify(metadata));
-        console.log(`Metadata saved for event ${eventId}. IPFS hash: ${ipfsHash}`);
+        // Upload to IPFS with retry logic
+        const fileName = `event-${eventId}-${Date.now()}`;
+        const ipfsHash = await pinata.uploadJSON(metadata, fileName);
 
-        return `ipfs://${ipfsHash}`;
+        console.log(`Metadata saved for event ${eventId}:
+        Local: ${localPath}
+        IPFS: ${ipfsHash}
+        Gateway: ${pinata.getGatewayUrl(ipfsHash)}`);
+
+        return ipfsHash;
     } catch (error) {
         console.error("Error saving event metadata:", error);
         throw error;
@@ -112,10 +130,9 @@ async function saveEventMetadata(eventId, metadata) {
  */
 async function updateEventMetadata(eventId, updates) {
     try {
-        // Get existing metadata
         const metadataPath = path.join(
             process.cwd(),
-            EVENT_CONFIG.metadataPath,
+            METADATA_CONFIG.basePath,
             `${eventId}.json`
         );
         
@@ -124,10 +141,10 @@ async function updateEventMetadata(eventId, updates) {
             const data = await fs.readFile(metadataPath, 'utf8');
             existingMetadata = JSON.parse(data);
         } catch (error) {
+            console.warn(`No existing metadata found for event ${eventId}, creating new`);
             existingMetadata = {};
         }
 
-        // Merge updates with existing metadata
         const updatedMetadata = {
             ...existingMetadata,
             ...updates,
@@ -142,11 +159,11 @@ async function updateEventMetadata(eventId, updates) {
             properties: {
                 ...existingMetadata.properties,
                 ...updates.properties,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                lastUpdateTx: process.env.LAST_TRANSACTION_HASH
             }
         };
 
-        // Save and upload updated metadata
         return await saveEventMetadata(eventId, updatedMetadata);
     } catch (error) {
         console.error("Error updating event metadata:", error);
@@ -154,9 +171,42 @@ async function updateEventMetadata(eventId, updates) {
     }
 }
 
+// Add main execution for CLI usage
+if (require.main === module) {
+    const command = process.argv[2];
+    const eventId = process.argv[3];
+    
+    if (!command || !eventId) {
+        console.log(`
+Usage: 
+  node eventMetadata.js generate <eventId> [options]
+  node eventMetadata.js update <eventId> [updates]
+        `);
+        process.exit(1);
+    }
+
+    const actions = {
+        generate: generateEventMetadata,
+        update: updateEventMetadata
+    };
+
+    if (actions[command]) {
+        actions[command](eventId, JSON.parse(process.argv[4] || '{}'))
+            .then(result => {
+                console.log(JSON.stringify(result, null, 2));
+                process.exit(0);
+            })
+            .catch(error => {
+                console.error(error);
+                process.exit(1);
+            });
+    }
+}
+
 module.exports = {
     generateEventMetadata,
     validateEventMetadata,
     saveEventMetadata,
-    updateEventMetadata
+    updateEventMetadata,
+    METADATA_CONFIG
 };

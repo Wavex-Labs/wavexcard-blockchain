@@ -1,3 +1,4 @@
+// scripts/config/eventConfig.js
 const EVENT_METADATA = {
     "name": "Wavex Event",
     "description": "A standard Wavex event",
