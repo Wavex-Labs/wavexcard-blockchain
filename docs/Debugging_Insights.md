@@ -133,7 +133,63 @@ async function withRetry(operation, retries = 0) {
 - Recommended confirmations: 2-3 blocks
 - Transaction timeout: ~5 minutes
 
-Would you like me to:
-1. Add more specific error cases?
-2. Include network-specific configurations?
-3. Add transaction monitoring examples? 🔧
+BREAKING CHANGE: Refactored event creation and metadata handling
+
+Key Changes:
+- Implemented environment-driven parameter approach
+- Enhanced gas optimization with dynamic estimation
+- Added robust error handling and validation
+- Integrated IPFS metadata management
+- Added transaction monitoring and retry logic
+
+Technical Details:
+1. Gas Optimization:
+- Dynamic fee calculation with safety margins
+- EIP-1559 compatible gas strategies
+- Configurable confirmation blocks
+
+2. Error Handling:
+- Validated environment variables
+- Enhanced metadata validation
+- Transaction monitoring with retries
+- Detailed error logging
+
+3. IPFS Integration:
+- Metadata structure standardization
+- Pinata integration for persistent storage
+- Local backup of metadata
+
+Common Issues & Solutions:
+1. Gas Errors:
+- "insufficient funds": Check gas estimation
+- "underpriced": Use dynamic gas calculation
+
+2. Transaction Failures:
+- "pending too long": Implement retry logic
+- "nonce mismatch": Reset account nonce
+
+3. Metadata Issues:
+- "invalid IPFS hash": Verify Pinata upload
+- "missing fields": Check metadata validation
+
+Environment Variables Required:
+WAVEX_NFT_V2_ADDRESS=
+PRIVATE_KEY=
+RPC_URL=
+CREATE_EVENT_NAME=
+CREATE_EVENT_PRICE=
+CREATE_EVENT_CAPACITY=
+CREATE_EVENT_TYPE=
+USDT_CONTRACT_ADDRESS=
+USDC_CONTRACT_ADDRESS=
+PINATA_API_KEY=
+PINATA_API_SECRET=
+PINATA_JWT=
+
+Testing:
+1. Run validation: npm run validate
+2. Test creation: npm run create-event
+3. Verify metadata: npm run verify-metadata
+
+Related: #123 #456
+Closes: #789
