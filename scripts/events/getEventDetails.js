@@ -1,60 +1,94 @@
 // scripts/events/getEventDetails.js
+require('dotenv').config();
 const hre = require("hardhat");
-const { EVENT_TYPES } = require('../config/eventConfig');
+const { EVENT_TYPES } = require('../../config/eventConfig');
+
+// Simplified constants
+const CONSTANTS = {
+    CONFIRMATIONS: 2,
+    PRICE_DECIMALS: 6, // Updated for USDC/USDT decimals
+    CURRENCY: 'USD'
+};
 
 /**
- * Retrieves detailed information about a specific event
- * @param {string|number} eventId The ID of the event to fetch
- * @returns {Promise<Object>} Event details
+ * Formats price to USD string
+ * @param {string} price - The raw price value
+ * @returns {string} Formatted price in USD
  */
-async function getEventDetails(eventId) {
+function formatPriceToUSD(price) {
+    const numericPrice = parseFloat(price);
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(numericPrice);
+}
+
+async function getEventDetails() {
+    if (!process.env.WAVEX_NFT_V2_ADDRESS) {
+        throw new Error("WAVEX_NFT_V2_ADDRESS not configured in environment");
+    }
+
     try {
-        if (!eventId) {
-            throw new Error("Event ID is required");
-        }
+        console.log(`Fetching details for event ID: ${process.env.GET_EVENT_ID}`);
+        
+        const wavexNFT = await hre.ethers.getContractAt(
+            "WaveXNFTV2",
+            process.env.WAVEX_NFT_V2_ADDRESS
+        );
 
-        // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
-
-        // Get event details from contract
-        const event = await wavexNFT.events(eventId);
+        const event = await wavexNFT.events(process.env.GET_EVENT_ID);
 
         // Format event details
+        const rawPrice = hre.ethers.formatUnits(event.price, CONSTANTS.PRICE_DECIMALS);
         const formattedEvent = {
-            id: eventId,
+            id: process.env.GET_EVENT_ID,
             name: event.name,
-            price: hre.ethers.formatEther(event.price),
+            price: formatPriceToUSD(rawPrice),
+            priceRaw: rawPrice,
             capacity: event.capacity.toString(),
             soldCount: event.soldCount.toString(),
             active: event.active,
             eventType: event.eventType.toString(),
-            typeLabel: Object.keys(EVENT_TYPES)[event.eventType] || 'UNKNOWN'
+            typeLabel: Object.keys(EVENT_TYPES).find(
+                key => EVENT_TYPES[key] === Number(event.eventType)
+            ) || 'UNKNOWN',
+            contractAddress: process.env.WAVEX_NFT_V2_ADDRESS
         };
 
-        // Calculate remaining capacity
+        // Calculate additional fields
         formattedEvent.remainingCapacity = (
             parseInt(formattedEvent.capacity) - 
             parseInt(formattedEvent.soldCount)
         ).toString();
 
-        // Add availability status
         formattedEvent.status = formattedEvent.active ? 
             (parseInt(formattedEvent.remainingCapacity) > 0 ? 'AVAILABLE' : 'SOLD_OUT') : 
             'INACTIVE';
 
-        console.log(`Event details for ID ${eventId}:`, formattedEvent);
+        console.log(`\nEvent Details:`);
+        console.log(JSON.stringify(formattedEvent, null, 2));
+
         return formattedEvent;
 
     } catch (error) {
         if (error.message.includes("Event not found")) {
-            console.error(`Event with ID ${eventId} does not exist`);
+            console.warn(`Event with ID ${process.env.GET_EVENT_ID} does not exist`);
             return null;
         }
-        console.error("Error fetching event details:", error);
+        console.error("Error fetching event details:", error.message);
         throw error;
     }
+}
+
+if (require.main === module) {
+    getEventDetails()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {

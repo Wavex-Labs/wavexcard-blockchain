@@ -1,167 +1,180 @@
 // scripts/events/purchaseEvent.js
+require('dotenv').config();
 const hre = require("hardhat");
 const { getEventDetails } = require('./getEventDetails');
-const { updateEventMetadata } = require('./eventMetadata');
+const { gasManager } = require('../utils/gasUtils');
+
+// Constants from .env
+const CONSTANTS = {
+    TOKEN_ID: process.env.PURCHASE_TOKEN_ID,
+    EVENT_ID: process.env.PURCHASE_EVENT_ID,
+    TICKET_COUNT: parseInt(process.env.PURCHASE_TICKET_COUNT || "1"),
+    CONFIRMATIONS: parseInt(process.env.TRANSACTION_CONFIRMATIONS || "2")
+};
 
 /**
- * Purchase access to an event for a specific token
- * @param {string|number} tokenId NFT token ID
- * @param {string|number} eventId Event ID
+ * Validate purchase parameters
+ * @param {Object} event Event details
+ * @param {number} ticketCount Number of tickets to purchase
+ */
+function validatePurchaseParams(event, ticketCount) {
+    if (!event.active) {
+        throw new Error(`Event ${event.id} is not active`);
+    }
+    
+    const remainingCapacity = parseInt(event.remainingCapacity);
+    if (remainingCapacity < ticketCount) {
+        throw new Error(
+            `Insufficient capacity. Requested: ${ticketCount}, Available: ${remainingCapacity}`
+        );
+    }
+}
+
+/**
+ * Format transaction details for logging
+ * @param {Object} receipt Transaction receipt
+ * @param {Object} gasConfig Gas configuration
+ * @returns {Object} Formatted transaction details
+ */
+function formatTransactionDetails(receipt, gasConfig) {
+    return {
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString() || '0',
+        effectiveGasPrice: receipt.effectiveGasPrice?.toString() || '0',
+        gasConfig: {
+            maxFeePerGas: gasConfig?.maxFeePerGas?.toString() || '0',
+            maxPriorityFeePerGas: gasConfig?.maxPriorityFeePerGas?.toString() || '0',
+            baseFee: gasConfig?.baseFee?.toString() || '0'
+        }
+    };
+}
+
+/**
+ * Purchase multiple tickets for an event using a single token
  * @param {Object} options Additional options
  * @returns {Promise<Object>} Purchase details
  */
-async function purchaseEvent(tokenId, eventId, options = {}) {
+async function purchaseEvent(options = {}) {
     try {
+        const tokenId = options.tokenId || CONSTANTS.TOKEN_ID;
+        const eventId = options.eventId || CONSTANTS.EVENT_ID;
+        const ticketCount = options.ticketCount || CONSTANTS.TICKET_COUNT;
+
         if (!tokenId || !eventId) {
-            throw new Error("Token ID and Event ID are required");
+            throw new Error("Token ID and Event ID are required in .env or options");
         }
+
+        console.log(`\nInitiating purchase for ${ticketCount} ticket(s)...`);
 
         // Get contract instance
         const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        if (!contractAddress) {
+            throw new Error("WAVEX_NFT_V2_ADDRESS not configured in environment");
+        }
+
+        const wavexNFT = await hre.ethers.getContractAt("WaveXNFTV2", contractAddress);
 
         // Get event details and validate
-        const event = await getEventDetails(eventId);
+        const event = await getEventDetails();
         if (!event) {
             throw new Error(`Event ${eventId} not found`);
         }
 
-        if (!event.active) {
-            throw new Error(`Event ${eventId} is not active`);
-        }
+        // Validate purchase parameters
+        validatePurchaseParams(event, ticketCount);
 
-        if (parseInt(event.remainingCapacity) <= 0) {
-            throw new Error(`Event ${eventId} is sold out`);
-        }
-
-        // Check token balance
+        // Check token balance for multiple tickets
         const balance = await wavexNFT.tokenBalance(tokenId);
-        const price = hre.ethers.parseEther(event.price);
+        const pricePerTicket = hre.ethers.parseUnits(event.priceRaw, 6);
+        const totalPrice = pricePerTicket * BigInt(ticketCount);
 
-        if (balance < price) {
+        if (balance < totalPrice) {
             throw new Error(
-                `Insufficient balance. Required: ${event.price} ETH, Available: ${hre.ethers.formatEther(balance)} ETH`
+                `Insufficient balance. Required: $${hre.ethers.formatUnits(totalPrice, 6)} USD, ` +
+                `Available: $${hre.ethers.formatUnits(balance, 6)} USD`
             );
         }
 
-        // Check if token already has access
-        const tokenEvents = await wavexNFT.getTokenEvents(tokenId);
-        if (tokenEvents.map(e => e.toString()).includes(eventId.toString())) {
-            throw new Error(`Token ${tokenId} already has access to event ${eventId}`);
+        // Get gas configuration
+        console.log("\nPreparing transaction...");
+        const gasConfig = await gasManager.getGasConfig();
+
+        // Purchase tickets in a loop
+        const purchases = [];
+        for (let i = 0; i < ticketCount; i++) {
+            console.log(`\nPurchasing ticket ${i + 1} of ${ticketCount}...`);
+            
+            // Estimate gas for each purchase
+            const gasLimit = await gasManager.estimateGasWithMargin(
+                wavexNFT,
+                'purchaseEventEntrance',
+                [tokenId, eventId]
+            );
+
+            const tx = await wavexNFT.purchaseEventEntrance(
+                tokenId,
+                eventId,
+                {
+                    maxFeePerGas: gasConfig.maxFeePerGas,
+                    maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas,
+                    gasLimit
+                }
+            );
+
+            console.log(`Transaction submitted: ${tx.hash}`);
+            console.log(`Waiting for ${CONSTANTS.CONFIRMATIONS} confirmations...`);
+
+            const receipt = await tx.wait(CONSTANTS.CONFIRMATIONS);
+            console.log(`Transaction confirmed in block ${receipt.blockNumber}`);
+
+            purchases.push({
+                ticketNumber: i + 1,
+                transaction: formatTransactionDetails(receipt, gasConfig)
+            });
         }
 
-        // Purchase event access
-        console.log(`Purchasing access to event ${eventId} for token ${tokenId}...`);
-        const tx = await wavexNFT.purchaseEventEntrance(
-            tokenId,
-            eventId,
-            {
-                gasLimit: options.gasLimit
-            }
-        );
-
-        const receipt = await tx.wait();
-
         // Get updated event details
-        const updatedEvent = await getEventDetails(eventId);
-
-        // Update event metadata
-        const metadataUpdates = {
-            properties: {
-                soldCount: updatedEvent.soldCount,
-                remainingCapacity: updatedEvent.remainingCapacity,
-                lastPurchase: new Date().toISOString()
-            }
-        };
-
-        await updateEventMetadata(eventId, metadataUpdates);
+        const updatedEvent = await getEventDetails();
 
         // Prepare purchase details
         const purchaseDetails = {
+            success: true,
             tokenId: tokenId.toString(),
             eventId: eventId.toString(),
-            price: event.price,
+            ticketCount,
+            totalPrice: `$${hre.ethers.formatUnits(totalPrice, 6)} USD`,
+            pricePerTicket: event.price,
+            purchases,
             purchaseDate: new Date().toISOString(),
-            transactionHash: receipt.transactionHash,
             event: updatedEvent
         };
 
-        // Find and parse the EventPurchased log
-        const eventPurchasedLog = receipt.logs.find(
-            log => log.topics[0] === wavexNFT.interface.getEventTopic('EventPurchased')
-        );
+        console.log(`\nPurchase Details:`);
+        console.log(JSON.stringify(purchaseDetails, null, 2));
 
-        if (eventPurchasedLog) {
-            const parsedLog = wavexNFT.interface.parseLog(eventPurchasedLog);
-            purchaseDetails.logDetails = {
-                tokenId: parsedLog.args.tokenId.toString(),
-                eventId: parsedLog.args.eventId.toString()
-            };
-        }
-
-        console.log(`Successfully purchased event access! Transaction: ${receipt.transactionHash}`);
         return purchaseDetails;
 
     } catch (error) {
-        if (error.message.includes("ERC721: invalid token ID")) {
-            throw new Error(`Invalid token ID: ${tokenId}`);
-        }
-        if (error.message.includes("Insufficient balance")) {
-            throw new Error(`Insufficient balance for token ${tokenId}`);
-        }
-        console.error("Error purchasing event access:", error);
-        throw error;
+        console.error("\nError purchasing event access:", error.message);
+        return {
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
-/**
- * Batch purchase event access for multiple tokens
- * @param {Array<string|number>} tokenIds Array of token IDs
- * @param {string|number} eventId Event ID
- * @param {Object} options Additional options
- * @returns {Promise<Object>} Batch purchase results
- */
-async function batchPurchaseEvent(tokenIds, eventId, options = {}) {
-    try {
-        if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
-            throw new Error("At least one token ID is required");
-        }
-
-        const results = await Promise.allSettled(
-            tokenIds.map(tokenId => 
-                purchaseEvent(tokenId, eventId, options)
-                    .then(result => ({
-                        tokenId,
-                        success: true,
-                        details: result
-                    }))
-                    .catch(error => ({
-                        tokenId,
-                        success: false,
-                        error: error.message
-                    }))
-            )
-        );
-
-        const successful = results.filter(r => r.value.success);
-        const failed = results.filter(r => !r.value.success);
-
-        return {
-            eventId,
-            totalAttempts: tokenIds.length,
-            successfulPurchases: successful.length,
-            failedPurchases: failed.length,
-            results: results.map(r => r.value)
-        };
-
-    } catch (error) {
-        console.error("Error in batch purchase:", error);
-        throw error;
-    }
+// Execute when run directly
+if (require.main === module) {
+    purchaseEvent()
+        .then(() => process.exit(0))
+        .catch(error => {
+            console.error(error);
+            process.exit(1);
+        });
 }
 
 module.exports = {
-    purchaseEvent,
-    batchPurchaseEvent
+    purchaseEvent
 };

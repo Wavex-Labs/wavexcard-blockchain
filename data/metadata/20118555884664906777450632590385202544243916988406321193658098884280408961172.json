@@ -1,0 +1,29 @@
+{
+  "name": "Wavex Brunch",
+  "description": "Special Wavex Brunch Event",
+  "image": "ipfs://QmDefaultEventImageHash",
+  "attributes": [
+    {
+      "trait_type": "Type",
+      "value": "STANDARD"
+    },
+    {
+      "trait_type": "Capacity",
+      "value": "20"
+    },
+    {
+      "trait_type": "Price",
+      "value": "$600 USD"
+    },
+    {
+      "trait_type": "Status",
+      "value": "Active"
+    }
+  ],
+  "properties": {
+    "eventId": "20118555884664906777450632590385202544243916988406321193658098884280408961172",
+    "createdAt": "2025-02-14T22:39:33.253Z",
+    "network": "polygonAmoy",
+    "contractAddress": "0x15dEdA5d29cd5Db6bBE7dD5B2031eF07D8A3F1ce"
+  }
+}

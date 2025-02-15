@@ -1,4 +1,4 @@
-// scripts/events/eventMetadata.js
+// scripts/events/eventMetadata.js terminal command: npx hardhat run scripts\events\eventMetadata.js --network polygonAmoy
 require('dotenv').config();
 const { EVENT_TYPES, EVENT_CONFIG } = require('../../config/eventConfig');
 const { PinataManager } = require('../utils/pinataUtils');
