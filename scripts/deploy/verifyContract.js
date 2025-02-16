@@ -1,4 +1,5 @@
 // scripts/deploy/verifyContract.js
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 require('dotenv').config({ path: 'V2.env' });
 

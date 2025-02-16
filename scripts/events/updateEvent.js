@@ -1,4 +1,5 @@
 // scripts/events/updateEvent.js
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 const { getEventDetails } = require('./getEventDetails');
 const { EVENT_TYPES, getEventMetadata } = require('../config/eventConfig');
@@ -26,6 +27,7 @@ async function updateEvent(eventId, options = {}) {
         const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
+        const gasConfig = await gasManager.getGasConfig();
 
         // Get current event details
         const currentEvent = await getEventDetails(eventId);

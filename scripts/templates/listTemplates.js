@@ -1,17 +1,19 @@
+// Terminal Command: npx hardhat run scripts/templates/listTemplates.js --network polygonAmoy
 const hre = require("hardhat");
+const { gasManager } = require('../utils/gasUtils');
 require('dotenv').config();
 
 async function listTemplates(options = {}) {
     try {
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+        const contractAddress = process.env.WAVEX_NFT_V3_ADDRESS;
         if (!contractAddress) {
-            throw new Error("WAVEX_NFT_V2_ADDRESS not found in environment");
+            throw new Error("WAVEX_NFT_V3_ADDRESS not found in environment");
         }
 
         console.log("Contract address:", contractAddress);
 
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV3");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
         // Get network gas settings from environment variables instead of network config

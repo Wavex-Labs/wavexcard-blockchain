@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 
 function validateEnvVariables() {
@@ -33,11 +34,13 @@ async function checkBalance(tokenId, options = {}) {
         }
 
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+        const gasConfig = await gasManager.getGasConfig();
         const wavexNFT = WaveXNFT.attach(process.env.WAVEX_NFT_V2_ADDRESS);
+        const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'tokenBalance', [tokenId]);
 
         // Get token balance
-        const balance = await wavexNFT.tokenBalance(tokenId);
-        const owner = await wavexNFT.ownerOf(tokenId);
+        const balance = await wavexNFT.tokenBalance(tokenId, { ...gasConfig, gasLimit });
+        const owner = await wavexNFT.ownerOf(tokenId, { ...gasConfig, gasLimit });
 
         // Create USDT and USDC contract instances
         const IERC20_ABI = [
@@ -60,13 +63,13 @@ async function checkBalance(tokenId, options = {}) {
         // Get transaction history if requested
         let transactions = [];
         if (options.includeHistory) {
-            const txCount = await wavexNFT.getTransactionCount(tokenId);
+            const txCount = await wavexNFT.getTransactionCount(tokenId, { ...gasConfig, gasLimit });
             const txCountNumber = Number(txCount);
             const historyLimit = parseInt(process.env.TRANSACTION_HISTORY_LIMIT || '100');
             const processCount = Math.min(txCountNumber, historyLimit);
 
             for (let i = 0; i < processCount; i++) {
-                const tx = await wavexNFT.getTransaction(tokenId, i);
+                const tx = await wavexNFT.getTransaction(tokenId, i, { ...gasConfig, gasLimit });
                 const tokenType = tx.token === process.env.USDT_CONTRACT_ADDRESS ? 'USDT' : 
                                 tx.token === process.env.USDC_CONTRACT_ADDRESS ? 'USDC' : 'UNKNOWN';
                 

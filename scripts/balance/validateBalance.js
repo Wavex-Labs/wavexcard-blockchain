@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 const { checkBalance } = require('./checkBalance');
 
@@ -117,7 +118,8 @@ async function validateBalance(params = {}, options = {}) {
         if (validationParams.operation) {
             switch (validationParams.operation.toUpperCase()) {
                 case 'PAYMENT':
-                    const paused = await wavexNFT.paused();
+                    const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'paused');
+                    const paused = await wavexNFT.paused({ ...gasConfig, gasLimit });
                     validationResult.checks.payment = {
                         allowed: !paused,
                         contractPaused: paused

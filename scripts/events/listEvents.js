@@ -3,6 +3,7 @@ require('dotenv').config();
 const hre = require("hardhat"); // Import hre explicitly
 const fs = require('fs').promises;
 const path = require('path');
+const { gasManager } = require('../utils/gasUtils');
 const { getEventDetails } = require('./getEventDetails');
 
 /**

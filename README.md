@@ -67,25 +67,25 @@ wavex-nft/
 
 ## Features
 
-- **WaveX Balance System**
+- **WaveX Balance System** - **Implemented and Tested**
   - Built-in balance for each NFT
   - Top-up capability using USDT/USDC
   - Direct payment processing through authorized merchants
   - Transaction history tracking
 
-- **Template-Based NFT System**
+- **Template-Based NFT System** - **Implemented and Tested**
   - Pre-defined templates (Gold, Platinum)
   - Customizable template properties
   - Template-specific initial balances and prices
   - VIP status management
 
-- **Event Management**
+- **Event Management** - **Implemented and Tested**
   - Event creation and management
   - Capacity tracking
   - Multiple event types
   - Event access validation
 
-- **Merchant Integration**
+- **Merchant Integration** - **Implemented and Tested**
   - Authorized merchant system
   - Payment processing capabilities
   - Transaction history tracking
@@ -183,7 +183,7 @@ Each step creates its own logs and saves relevant information to the deployments
 
 ### Testing
 
-The project includes comprehensive tests for all major functionality:
+The project includes **comprehensive tests for all major functionality**:
 
 - Contract deployment
 - Template management

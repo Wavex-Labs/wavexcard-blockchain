@@ -1,0 +1,9 @@
+{
+  "network": "polygonAmoy",
+  "WaveXNFTV3": "0xC444DEAA508025FdBdC93C42a4E7Dbdc10c3a975",
+  "timestamp": "2025-02-16T19:08:10.632Z",
+  "deployerAddress": "0xf383A56057374Ae7cb437D61cc86843855F0DdB5",
+  "supportedTokens": {
+    "USDT": ""
+  }
+}

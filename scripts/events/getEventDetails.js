@@ -1,5 +1,6 @@
 // scripts/events/getEventDetails.js
 require('dotenv').config();
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 const { EVENT_TYPES } = require('../../config/eventConfig');
 

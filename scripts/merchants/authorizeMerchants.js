@@ -1,3 +1,4 @@
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 
 async function authorizeMerchant(merchantAddress) {
@@ -6,7 +7,8 @@ async function authorizeMerchant(merchantAddress) {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        const tx = await wavexNFT.authorizeMerchant(merchantAddress);
+        const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'authorizeMerchant', [merchantAddress]);
+        const tx = await wavexNFT.authorizeMerchant(merchantAddress, { ...gasConfig, gasLimit });
         const receipt = await tx.wait();
 
         console.log(`Merchant ${merchantAddress} authorized successfully. Transaction: ${receipt.transactionHash}`);
@@ -23,7 +25,8 @@ async function revokeMerchant(merchantAddress) {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        const tx = await wavexNFT.revokeMerchant(merchantAddress);
+        const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'revokeMerchant', [merchantAddress]);
+        const tx = await wavexNFT.revokeMerchant(merchantAddress, { ...gasConfig, gasLimit });
         const receipt = await tx.wait();
 
         console.log(`Merchant ${merchantAddress} revoked successfully. Transaction: ${receipt.transactionHash}`);
@@ -40,7 +43,8 @@ async function isMerchantAuthorized(merchantAddress) {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        const authorized = await wavexNFT.authorizedMerchants(merchantAddress);
+        const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'authorizedMerchants', [merchantAddress]);
+        const authorized = await wavexNFT.authorizedMerchants(merchantAddress, { ...gasConfig, gasLimit });
         return authorized;
     } catch (error) {
         console.error(`Error checking merchant authorization for ${merchantAddress}:`, error);

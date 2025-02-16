@@ -1,4 +1,5 @@
 // scripts/merchant/addMerchant.js
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 require('dotenv').config({ path: 'V2.env' });
 
@@ -18,23 +19,22 @@ async function addMerchant() {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
-        // Gas settings
-        const gasSettings = {
-            gasLimit: process.env.GAS_LIMIT || 5000000,
-            gasPrice: process.env.GAS_PRICE || 35000000000
-        };
+        const gasConfig = await gasManager.getGasConfig();
 
         const merchantAddress = process.env.NEW_MERCHANT_ADDRESS;
         console.log(`\nProcessing merchant: ${merchantAddress}`);
 
         // Check if merchant is already authorized
         const isAuthorized = await wavexNFT.authorizedMerchants(merchantAddress);
-        
+
         if (!isAuthorized) {
             console.log("Authorizing merchant...");
             const tx = await wavexNFT.authorizeMerchant(
                 merchantAddress,
-                gasSettings
+                {
+                    ...gasConfig,
+                    gasLimit: await gasManager.estimateGasWithMargin(wavexNFT, 'authorizeMerchant', [merchantAddress])
+                }
             );
             await tx.wait();
             console.log("✅ Merchant authorized successfully");

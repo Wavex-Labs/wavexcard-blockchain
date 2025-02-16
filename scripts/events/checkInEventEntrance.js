@@ -16,15 +16,16 @@ class CheckInError extends Error {
 async function getEventAccessDetails(contract, tokenId, eventId) {
     try {
         // Get purchased tickets count
-        const tokenEvents = await contract.getTokenEvents(tokenId);
+        const gasLimit = await gasManager.estimateGasWithMargin(contract, 'getTokenEvents', [tokenId]);
+        const tokenEvents = await contract.getTokenEvents(tokenId, { ...gasConfig, gasLimit });
         const purchasedTickets = tokenEvents.filter(e => e.toString() === eventId.toString()).length;
 
         // Get used tickets count (0 USD payments for this specific event)
-        const txCount = await contract.getTransactionCount(tokenId);
+        const txCount = await contract.getTransactionCount(tokenId, { ...gasConfig, gasLimit });
         let usedTickets = 0;
         
         for (let i = 0; i < txCount; i++) {
-            const tx = await contract.getTransaction(tokenId, i);
+            const tx = await contract.getTransaction(tokenId, i, { ...gasConfig, gasLimit });
             if (tx.amount.toString() === "0" && 
                 tx.transactionType === "PAYMENT" && 
                 tx.metadata.includes(`EVENT_${eventId}`)) {

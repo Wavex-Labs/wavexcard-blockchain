@@ -1,7 +1,7 @@
 // scripts/events/createEvent.js
 require('dotenv').config();
 const hre = require("hardhat");
-const { EVENT_TYPES, EVENT_METADATA, getEventMetadata } = require('../../config/eventConfig');
+const { EVENT_TYPES, EVENT_METADATA } = require('../../config/eventConfig');
 const { PinataManager } = require('../utils/pinataUtils');
 const { gasManager } = require('../utils/gasUtils');
 
@@ -118,21 +118,13 @@ async function createEvent() {
         const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
         const contract = WaveXNFT.attach(process.env.WAVEX_NFT_V2_ADDRESS);
 
-        // Get gas configuration
         const gasConfig = await gasManager.getGasConfig();
-
-        // Estimate gas with safety margin
-        console.log("Estimating gas with safety margin...");
-        const gasLimit = await gasManager.estimateGasWithMargin(
-            contract,
-            'createEvent',
-            [
-                process.env.CREATE_EVENT_NAME,
-                priceInTokens,
-                parseInt(process.env.CREATE_EVENT_CAPACITY),
-                parseInt(process.env.CREATE_EVENT_TYPE)
-            ]
-        );
+        const gasLimit = await gasManager.estimateGasWithMargin(contract, 'createEvent', [
+            process.env.CREATE_EVENT_NAME,
+            priceInTokens,
+            parseInt(process.env.CREATE_EVENT_CAPACITY),
+            parseInt(process.env.CREATE_EVENT_TYPE)
+        ]);
 
         // Create event transaction
         console.log(`Creating event: ${process.env.CREATE_EVENT_NAME}...`);
@@ -159,7 +151,7 @@ async function createEvent() {
                     topics: log.topics,
                     data: log.data
                 });
-                
+
                 if (parsedLog.name === 'EventCreated') {
                     eventId = parsedLog.args.eventId;
                     break;

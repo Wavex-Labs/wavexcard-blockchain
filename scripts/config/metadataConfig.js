@@ -1,3 +1,4 @@
+const { gasManager } = require('../utils/gasUtils');
 // scripts/config/metadataConfig.js
 
 const TEMPLATE_METADATA = {

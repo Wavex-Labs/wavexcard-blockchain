@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 const { authorizeMerchant, revokeMerchant } = require("./authorizeMerchants");
 

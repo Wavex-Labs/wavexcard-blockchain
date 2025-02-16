@@ -8,7 +8,6 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const POLYGONSCAN_API_KEY = process.env.POLYGONSCAN_API_KEY;
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 
-/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
     version: "0.8.20",
@@ -17,7 +16,8 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
-    },
+      viaIR: true
+    }
   },
   networks: {
     hardhat: {
@@ -32,12 +32,12 @@ module.exports = {
       url: `https://polygon-amoy.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       chainId: 80002,
-      gasPrice: 1000000000, // 1 gwei
-      gas: 2500000, // gas limit
+      gasPrice: 25000000000,
+      gas: parseInt(process.env.GAS_LIMIT) || 2100000,
     },
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
+    enabled: process.env.REPORT_GAS === "true",
     currency: "USD",
     coinmarketcap: process.env.COINMARKETCAP_API_KEY,
   },

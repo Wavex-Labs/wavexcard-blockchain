@@ -1,14 +1,7 @@
-require('dotenv').config();
+// scripts/balance/processPayment.js
 const ethers = require('ethers');
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
-
-async function getGasPrice(provider) {
-    const gasPrice = await provider.getFeeData();
-    return {
-        maxFeePerGas: gasPrice.maxFeePerGas,
-        maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas
-    };
-}
 
 async function processPayment(params) {
     try {
@@ -48,22 +41,12 @@ async function processPayment(params) {
             throw new Error("Wallet is not an authorized merchant");
         }
 
-        // Get current gas prices
-        const gasPrices = await getGasPrice(provider);
-        console.log("Current gas prices:", {
-            maxFeePerGas: ethers.formatUnits(gasPrices.maxFeePerGas, 'gwei'),
-            maxPriorityFeePerGas: ethers.formatUnits(gasPrices.maxPriorityFeePerGas, 'gwei')
-        });
+        const gasConfig = await gasManager.getGasConfig();
 
         // Process payment
         console.log(`Processing payment of ${params.amount} USDT from token ${params.tokenId}...`);
 
-        // Estimate gas
-        const gasLimit = await contract.processPayment.estimateGas(
-            params.tokenId,
-            paymentAmount,
-            params.metadata || ""
-        );
+        const gasLimit = await gasManager.estimateGasWithMargin(contract, 'processPayment', [params.tokenId, paymentAmount, params.metadata || ""]);
 
         console.log(`Estimated gas limit: ${gasLimit.toString()}`);
 
@@ -72,9 +55,8 @@ async function processPayment(params) {
             paymentAmount,
             params.metadata || "",
             {
-                maxFeePerGas: gasPrices.maxFeePerGas,
-                maxPriorityFeePerGas: gasPrices.maxPriorityFeePerGas,
-                gasLimit: Math.floor(gasLimit.toString() * 1.2) // Add 20% buffer
+                ...gasConfig,
+                gasLimit
             }
         );
 

@@ -2,6 +2,7 @@
 const { TEMPLATE_METADATA, STANDARD_CONFIG } = require('../config/metadataConfig');
 const { uploadToIPFS } = require('../utils/pinataUtils');
 const path = require('path');
+const { gasManager } = require('../utils/gasUtils');
 const fs = require('fs').promises;
 
 /**

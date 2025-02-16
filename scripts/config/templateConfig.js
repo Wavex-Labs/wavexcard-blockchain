@@ -1,6 +1,7 @@
 // scripts/config/templateConfig.js
 const { TEMPLATE_METADATA } = require('./metadataConfig');
 const hre = require("hardhat");
+const { gasManager } = require('../utils/gasUtils');
 require('dotenv').config();
 
 // Internal metadata validation

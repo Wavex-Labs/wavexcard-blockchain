@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 
 async function main() {

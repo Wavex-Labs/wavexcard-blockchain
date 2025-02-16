@@ -2,6 +2,7 @@
 require('dotenv').config();
 const axios = require('axios');
 const FormData = require('form-data');
+const { gasManager } = require('./gasUtils');
 const { EVENT_TYPES } = require('../../config/eventConfig');
 
 class PinataManager {

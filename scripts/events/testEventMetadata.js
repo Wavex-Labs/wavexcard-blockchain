@@ -2,6 +2,7 @@
 const { 
     generateEventMetadata, 
     saveEventMetadata 
+const { gasManager } = require('../utils/gasUtils');
 } = require('./eventMetadata');
 
 async function main() {

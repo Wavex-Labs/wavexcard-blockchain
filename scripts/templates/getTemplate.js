@@ -1,5 +1,6 @@
-// scripts/templates/getTemplate.js
+// scripts/templates/getTemplate.js Terminal Command: npx hardhat run scripts/templates/getTemplate.js --network polygonAmoy
 const hre = require("hardhat");
+const { gasManager } = require('../utils/gasUtils');
 require('dotenv').config();
 
 async function getTemplate(templateId) {
@@ -7,13 +8,13 @@ async function getTemplate(templateId) {
         console.log(`\nGetting template ${templateId}...`);
 
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+        const contractAddress = process.env.WAVEX_NFT_V3_ADDRESS;
         if (!contractAddress) {
-            throw new Error("WAVEX_NFT_V2_ADDRESS not found in environment");
+            throw new Error("WAVEX_NFT_V3_ADDRESS not found in environment");
         }
         console.log('\nContract address:', contractAddress);
 
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV3");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
         // Get template details
@@ -41,7 +42,11 @@ async function getTemplate(templateId) {
 // Parse command line arguments
 async function main() {
     // Get template ID from command line arguments
-    const templateId = process.argv.length > 2 ? parseInt(process.argv[2]) : 1;
+    // const templateId = process.argv.length > 2 ? parseInt(process.argv[2]) : 1;
+    const templateId = process.env.TEMPLATE_ID;
+    if (!templateId) {
+        throw new Error("TEMPLATE_ID environment variable is required");
+    }
     
     try {
         await getTemplate(templateId);

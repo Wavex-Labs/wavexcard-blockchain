@@ -1,8 +1,7 @@
 // scripts/mint/batchMint.js
 const hre = require("hardhat");
 const { mintFromTemplate } = require('./mintFromTemplate');
-const { validateMint, batchValidateMint } = require('./validateMint');
-const { uploadToIPFS } = require('../utils/pinataUtils');
+const { batchValidateMint } = require('./validateMint');
 
 /**
  * Processes a batch of mints with optimizations
@@ -15,6 +14,8 @@ const { uploadToIPFS } = require('../utils/pinataUtils');
  */
 async function batchMint(params, options = {}) {
     try {
+        // Implementation will be added here
+    } catch (error) {
         if (!params.templateId || !Array.isArray(params.recipients)) {
             throw new Error("Template ID and recipients array are required");
         }
@@ -46,13 +47,13 @@ async function batchMint(params, options = {}) {
         }
 
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
-        const wavexNFT = WaveXNFT.attach(contractAddress);
+        const contractAddress = process.env.WAVEX_NFT_V3_ADDRESS;
+        const WaveXNFTV3 = await hre.ethers.getContractFactory("WaveXNFTV3");
+        const wavexNFT = WaveXNFTV3.attach(contractAddress);
 
         // Get template details for price calculation
         const template = await wavexNFT.getTemplate(params.templateId);
-        const mintPrice = template.price;
+        const mintPrice = template[2]; // price is the third element in V3
         const totalCost = mintPrice.mul(validRecipients.length);
 
         console.log(`Batch minting ${validRecipients.length} NFTs from template ${params.templateId}`);
@@ -99,7 +100,8 @@ async function batchMint(params, options = {}) {
                         {
                             templateId: params.templateId,
                             to: recipient,
-                            metadata: nftMetadata
+                            metadata: nftMetadata,
+                            paymentToken: process.env.USDT_CONTRACT_ADDRESS // Added paymentToken parameter
                         },
                         {
                             ...options,
@@ -156,8 +158,6 @@ async function batchMint(params, options = {}) {
 
         console.log(`Batch minting completed: ${successCount} successful, ${failureCount} failed`);
         return report;
-
-    } catch (error) {
         console.error("Error in batch minting:", error);
         throw error;
     }

@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require("fs");
 const path = require("path");
 const { uploadToIPFS } = require('../utils/pinataUtils');
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 
 // Fetch template data from the blockchain for a specific token
@@ -13,7 +14,8 @@ async function getTokenTemplate(tokenId) {
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
         // Get template count
-        const templateCount = await wavexNFT.getTemplateCount();
+        const gasLimit = await gasManager.estimateGasWithMargin(wavexNFT, 'getTemplateCount');
+        const templateCount = await wavexNFT.getTemplateCount({ ...gasConfig, gasLimit });
         
         // Get token balance
         const tokenBalance = await wavexNFT.tokenBalance(tokenId);

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
+const { gasManager } = require('../utils/gasUtils');
 const AdmZip = require('adm-zip');
 
 const ICON_PATH = process.env.ICON_PATH;

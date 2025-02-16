@@ -1,5 +1,6 @@
 // Terminal Command: npx hardhat run scripts/balance/topUpBalance.js --network polygonAmoy
 require('dotenv').config();
+const { gasManager } = require('../utils/gasUtils');
 const hre = require("hardhat");
 const { checkBalance } = require('./checkBalance');
 
@@ -152,7 +153,7 @@ async function topUpBalance() {
                 {
                     maxFeePerGas,
                     maxPriorityFeePerGas,
-                    gasLimit: parseInt(process.env.GAS_LIMIT)
+                    gasLimit: await gasManager.estimateGasWithMargin(token, 'approve', [process.env.WAVEX_NFT_V2_ADDRESS, amount])
                 }
             );
             console.log("Waiting for approval transaction...");
@@ -168,7 +169,7 @@ async function topUpBalance() {
                 {
                     maxFeePerGas,
                     maxPriorityFeePerGas,
-                    gasLimit: parseInt(process.env.GAS_LIMIT)
+                    gasLimit: await gasManager.estimateGasWithMargin(token, 'approve', [process.env.WAVEX_NFT_V2_ADDRESS, amount])
                 }
             );
             console.log("Waiting for top-up confirmation...");
@@ -182,7 +183,7 @@ async function topUpBalance() {
                 {
                     maxFeePerGas,
                     maxPriorityFeePerGas,
-                    gasLimit: parseInt(process.env.GAS_LIMIT)
+                    gasLimit: await gasManager.estimateGasWithMargin(token, 'approve', [process.env.WAVEX_NFT_V2_ADDRESS, amount])
                 }
             );
             console.log("Waiting for transfer confirmation...");
@@ -200,7 +201,7 @@ async function topUpBalance() {
                 paymentToken: params.paymentToken,
                 merchantWallet: params.merchantWallet,
                 topUpHash: topUpReceipt.hash,
-                transferHash: transferReceipt.hash,
+                
                 network: hre.network.name,
                 timestamp: new Date().toISOString()
             };

@@ -96,6 +96,7 @@ async function saveEventMetadata(eventId, metadata) {
 
         // Initialize Pinata
         const pinata = new PinataManager();
+        const gasConfig = await gasManager.getGasConfig();
         await pinata.testAuthentication();
 
         // Ensure metadata directory exists
@@ -108,7 +109,8 @@ async function saveEventMetadata(eventId, metadata) {
 
         // Upload to IPFS with retry logic
         const fileName = `event-${eventId}-${Date.now()}`;
-        const ipfsHash = await pinata.uploadJSON(metadata, fileName);
+        const gasLimit = await gasManager.estimateGasWithMargin(hre.ethers.provider, 'getGasPrice');
+        const ipfsHash = await pinata.uploadJSON(metadata, fileName, { ...gasConfig, gasLimit });
 
         console.log(`Metadata saved for event ${eventId}:
         Local: ${localPath}

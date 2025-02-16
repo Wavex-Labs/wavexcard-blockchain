@@ -3,11 +3,12 @@ const hre = require("hardhat");
 const { isAddress } = require('ethers');
 const path = require('path');
 const fs = require('fs');
+const { gasManager } = require('../utils/gasUtils');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 function validateEnvVariables() {
     const required = [
-        'WAVEX_NFT_V2_ADDRESS',
+        'WAVEX_NFT_V3_ADDRESS',
         'VALIDATE_TOKEN_ID'
     ];
 
@@ -38,12 +39,12 @@ async function validateMint() {
         };
 
         // Get contract instance
-        const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+        const contractAddress = process.env.WAVEX_NFT_V3_ADDRESS;
         if (!isAddress(contractAddress)) {
             throw new Error('Invalid contract address in environment variables');
         }
 
-        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV2");
+        const WaveXNFT = await hre.ethers.getContractFactory("WaveXNFTV3");
         const wavexNFT = WaveXNFT.attach(contractAddress);
 
         // Get token data
@@ -140,7 +141,7 @@ async function validateMint() {
             }
 
             // Get local metadata
-            const localMetadataPath = path.join(process.cwd(), "V2", "metadata", "nfts", `${tokenId}.json`);
+            const localMetadataPath = path.join(process.cwd(), "metadata", "nfts", `${tokenId}.json`);
             if (fs.existsSync(localMetadataPath)) {
                 const localMetadata = JSON.parse(fs.readFileSync(localMetadataPath, 'utf8'));
                 validationResults.metadata.local = localMetadata;

@@ -1,13 +1,14 @@
+const { gasManager } = require('../utils/gasUtils');
 // scripts/setup/setupTokens.js
 async function main() {
     console.log("\n🚀 Starting token setup...");
 
     // Get contract
-    const contractAddress = process.env.WAVEX_NFT_V2_ADDRESS;
+    const contractAddress = process.env.WAVEX_NFT_V3_ADDRESS;
     console.log(`📄 Contract Address: ${contractAddress}`);
     
-    const WaveXNFTV2 = await hre.ethers.getContractFactory("WaveXNFTV2");
-    const contract = WaveXNFTV2.attach(contractAddress);
+    const WaveXNFTV3 = await hre.ethers.getContractFactory("WaveXNFTV3");
+    const contract = WaveXNFTV3.attach(contractAddress);
 
     // Get token addresses
     const usdtAddress = process.env.USDT_CONTRACT_ADDRESS.split('#')[0].trim();
@@ -44,7 +45,7 @@ async function main() {
         try {
             console.log(`Adding ${symbol}: ${tokenAddress}`);
             const tx = await contract.addSupportedToken(tokenAddress, {
-                gasPrice: BigInt(process.env.GAS_PRICE)
+                gasLimit: await gasManager.estimateGasWithMargin(contract, 'addSupportedToken', [tokenAddress])
             });
             
             console.log(`📝 Transaction Hash: ${tx.hash}`);

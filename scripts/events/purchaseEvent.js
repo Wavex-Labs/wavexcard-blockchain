@@ -21,7 +21,7 @@ function validatePurchaseParams(event, ticketCount) {
     if (!event.active) {
         throw new Error(`Event ${event.id} is not active`);
     }
-    
+
     const remainingCapacity = parseInt(event.remainingCapacity);
     if (remainingCapacity < ticketCount) {
         throw new Error(
@@ -74,6 +74,7 @@ async function purchaseEvent(options = {}) {
         }
 
         const wavexNFT = await hre.ethers.getContractAt("WaveXNFTV2", contractAddress);
+        const gasConfig = await gasManager.getGasConfig();
 
         // Get event details and validate
         const event = await getEventDetails();
@@ -85,7 +86,9 @@ async function purchaseEvent(options = {}) {
         validatePurchaseParams(event, ticketCount);
 
         // Check token balance for multiple tickets
-        const balance = await wavexNFT.tokenBalance(tokenId);
+        const gasLimitBalance = await gasManager.estimateGasWithMargin(wavexNFT, 'tokenBalance', [tokenId]);
+
+        const balance = await wavexNFT.tokenBalance(tokenId, { ...gasConfig, gasLimit: gasLimitBalance });
         const pricePerTicket = hre.ethers.parseUnits(event.priceRaw, 6);
         const totalPrice = pricePerTicket * BigInt(ticketCount);
 
@@ -96,17 +99,13 @@ async function purchaseEvent(options = {}) {
             );
         }
 
-        // Get gas configuration
-        console.log("\nPreparing transaction...");
-        const gasConfig = await gasManager.getGasConfig();
-
         // Purchase tickets in a loop
         const purchases = [];
         for (let i = 0; i < ticketCount; i++) {
             console.log(`\nPurchasing ticket ${i + 1} of ${ticketCount}...`);
-            
+
             // Estimate gas for each purchase
-            const gasLimit = await gasManager.estimateGasWithMargin(
+            const gasLimitPurchase = await gasManager.estimateGasWithMargin(
                 wavexNFT,
                 'purchaseEventEntrance',
                 [tokenId, eventId]
@@ -116,9 +115,8 @@ async function purchaseEvent(options = {}) {
                 tokenId,
                 eventId,
                 {
-                    maxFeePerGas: gasConfig.maxFeePerGas,
-                    maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas,
-                    gasLimit
+                    ...gasConfig,
+                    gasLimit: gasLimitPurchase
                 }
             );
 
