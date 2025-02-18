@@ -32,11 +32,13 @@ contract WaveXNFTV3 is IWaveXNFTV3, ERC721URIStorage, Pausable, Ownable {
     constructor() ERC721("WaveX NFT V3", "WAVEX3") Ownable(msg.sender) {}
 
     // Template Management
-    function initializeDefaultTemplates() external override onlyOwner {
+    function initializeDefaultTemplates() external onlyOwner {
         require(templates[1].baseBalance == 0, "Templates already initialized");
         
-        _addTemplate(1, "Gold", 1000 * 10**18, 1000 * 10**18, 0, false, "", true);
-        _addTemplate(2, "Platinum", 3000 * 10**18, 3000 * 10**18, 0, false, "", true);
+        _addTemplate(1, "Gold", 3000 * 10**18, 3000 * 10**18, 0, false, "", true);
+        _addTemplate(2, "Platinum", 5000 * 10**18, 5000 * 10**18, 0, false, "", true);
+        _addTemplate(3, "Black", 1000 * 10**18, 1000 * 10**18, 0, false, "", true);
+        _addTemplate(4, "EventBrite", 0 * 10**18, 0 * 10**18, 0, false, "", true);
     }
 
     function addTemplate(
@@ -212,15 +214,15 @@ function updateTokenURI(uint256 tokenId, string memory newUri) external onlyOwne
     address paymentToken
 ) external override whenNotPaused returns (uint256) {
     require(templates[templateId].active, "Template not active");
-    require(supportedTokens[paymentToken], "Token not supported");
-
-    Template memory template = templates[templateId];
+    
+Template memory template = templates[templateId];
+    require(template.price > 0, "Template price not set");
+ 
     IERC20 token = IERC20(paymentToken);
+    require(token.transferFrom(msg.sender, address(this), template.price),
+ "Payment failed"
+);
 
-    require(
-        token.transferFrom(msg.sender, address(this), template.price),
-        "Payment failed"
-    );
     _tokenIds++;
     uint256 newTokenId = _tokenIds;
 
@@ -315,7 +317,7 @@ function updateTokenURI(uint256 tokenId, string memory newUri) external onlyOwne
         authorizedMerchants[merchant] = false;
     }
 
-    function addSupportedToken(address tokenAddress) external override onlyOwner {
+    function addSupportedToken(address tokenAddress) external onlyOwner {
         require(tokenAddress != address(0), "Invalid token address");
         supportedTokens[tokenAddress] = true;
         emit SupportedTokenAdded(tokenAddress);

@@ -1,10 +1,6 @@
-// Terminal Command: npx hardhat run scripts/mint/mintFromTemplate.js --network polygonAmoy
-require('dotenv').config();
-const { ethers } = require("hardhat");
+const { ethers, network } = require("hardhat");
 const { gasManager } = require('../utils/gasUtils');
-const { PinataManager } = require('../utils/pinataUtils');
 
-// Error handling class
 class MintError extends Error {
     constructor(message, code, details = {}) {
         super(message);
@@ -14,261 +10,247 @@ class MintError extends Error {
     }
 }
 
-// Validation functions
-async function validateTokenBalancesAndAllowances(signer, templateId, paymentTokenContract) { // Renamed paymentToken to paymentTokenContract
-    const template = await contract.getTemplate(templateId);
-    const templatePrice = template[2];
+const USDT_DECIMALS = 6;
+const CONTRACT_DECIMALS = 18;
 
-    // Check USDT balance
-    const balance = await paymentTokenContract.balanceOf(signer.address); // Use paymentTokenContract
-    if (balance.lt(templatePrice)) {
-        throw new MintError(
-            'Insufficient token balance',
-            'INSUFFICIENT_BALANCE',
-            {
-                required: templatePrice.toString(),
-                available: balance.toString()
-            }
-        );
-    }
-
-    // Check allowance
-    const allowance = await paymentTokenContract.allowance(signer.address, contract.address); // Use paymentTokenContract
-    if (allowance.lt(templatePrice)) {
-        throw new MintError(
-            'Insufficient token allowance',
-            'INSUFFICIENT_ALLOWANCE',
-            {
-                required: templatePrice.toString(),
-                available: allowance.toString()
-            }
-        );
-    }
-}
-
-async function validateTemplate(contract, templateId) {
-    const template = await contract.getTemplate(templateId);
-    if (!template || !template.active) {
-        throw new MintError(
-            'Template is not active or does not exist',
-            'INVALID_TEMPLATE',
-            { templateId }
-        );
-    }
-    return template;
-}
-
-async function validateRecipient(recipientAddress) {
-    if (!ethers.isAddress(recipientAddress)) {
-        throw new MintError(
-            'Invalid recipient address',
-            'INVALID_RECIPIENT',
-            { address: recipientAddress }
-        );
-    }
-
-    // Check if address is a contract
-    const code = await ethers.provider.getCode(recipientAddress);
-    if (code !== '0x') {
-        throw new MintError(
-            'Recipient cannot be a contract',
-            'INVALID_RECIPIENT_TYPE',
-            { address: recipientAddress }
-        );
-    }
-}
-
-async function validateEnvironment(templateId) {
-    const requiredVars = [
-        'MINT_FROM_TEMPLATE_ID',
-        'MINT_RECIPIENT_ADDRESS',
-        'USDT_CONTRACT_ADDRESS',
-        `TEMPLATE_${templateId}_NAME`,
-        `TEMPLATE_${templateId}_IMAGE`,
-        `TEMPLATE_${templateId}_PRICE`,
-        'WAVEX_NFT_V3_ADDRESS'
-    ];
-
-    for (const varName of requiredVars) {
-        if (!process.env[varName]) {
-            throw new MintError(
-                `Missing required environment variable: ${varName}`,
-                'INVALID_ENVIRONMENT'
-            );
-        }
-    }
-}
-
-async function mint() {
+const mint = async () => {
     try {
-        const templateId = process.env.MINT_FROM_TEMPLATE_ID;
-        await validateEnvironment(templateId);
-
+        // Ensure network connection
+        await ethers.provider.getNetwork();
+        
         const [signer] = await ethers.getSigners();
         console.log(`Using signer: ${signer.address}`);
+        console.log(`Current Network: ${network.name}`);
 
-        // Initialize contracts
-        const WaveXNFTV3 = await ethers.getContractFactory("WaveXNFTV3");
-        const contract = WaveXNFTV3.attach(process.env.WAVEX_NFT_V3_ADDRESS);
+        // Required environment variables
+        const requiredVars = [
+            'MINT_FROM_TEMPLATE_ID',
+            'MINT_RECIPIENT_ADDRESS',
+            'USDT_CONTRACT_ADDRESS',
+            'WAVEX_NFT_V3_ADDRESS'
+        ];
 
-        // Initialize USDT contract
-        const USDT = await ethers.getContractAt(
-            "@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20",
-            process.env.USDT_CONTRACT_ADDRESS
-        );
+        requiredVars.forEach(varName => {
+            if (!process.env[varName]) {
+                throw new Error(`Missing required environment variable: ${varName}`);
+            }
+        });
 
+        // Initialize contracts and parameters
+        const usdtAddress = process.env.USDT_CONTRACT_ADDRESS;
+        const nftAddress = process.env.WAVEX_NFT_V3_ADDRESS;
+        const templateId = ethers.toBigInt(process.env.MINT_FROM_TEMPLATE_ID);
+        const recipientAddress = process.env.MINT_RECIPIENT_ADDRESS;
+
+        console.log('Contract Addresses:', {
+            USDT: usdtAddress,
+            NFT: nftAddress,
+            templateId: templateId.toString(),
+            recipient: recipientAddress
+        });
+
+        // Contract initialization
+        const USDT = await ethers.getContractAt("IERC20V3", usdtAddress, signer);
         
+        // Get the contract factory to ensure ABI is loaded
+        const WaveXNFTV3Factory = await ethers.getContractFactory("WaveXNFTV3");
+        
+        // Debug logging for interface
+        console.log('\n--- Contract Interface Debug ---');
+        const mintFunction = WaveXNFTV3Factory.interface.fragments.find(f => f.name === 'mintFromTemplate');
+        if (!mintFunction) {
+            throw new Error('Contract interface missing mintFromTemplate function');
+        }
+        
+        console.log('Found mintFromTemplate function:', {
+            name: mintFunction.name,
+            inputs: mintFunction.inputs
+        });
+        
+        const nftContract = WaveXNFTV3Factory.attach(nftAddress).connect(signer);
 
-        // Get template details and convert price
-        const template = await contract.getTemplate(templateId);
-        const templatePriceInWei = template[2];
-        const templatePrice = ethers.parseUnits(
-            ethers.formatUnits(templatePriceInWei, 18),
-            6 // USDT decimals
+        // Verify contract deployment
+        const usdtCode = await ethers.provider.getCode(usdtAddress);
+        const nftCode = await ethers.provider.getCode(nftAddress);
+        
+        if (usdtCode === '0x') throw new MintError('USDT contract not deployed', 'CONTRACT_NOT_DEPLOYED');
+        if (nftCode === '0x') throw new MintError('NFT contract not deployed', 'CONTRACT_NOT_DEPLOYED');
+
+        // Pre-mint checks
+        console.log("\n--- Pre-Mint Validation ---");
+
+        // Get and verify template
+        let template;
+        try {
+            template = await nftContract.getTemplate(templateId);
+            console.log('Template details:', {
+                name: template[0],
+                baseBalance: template[1].toString(),
+                price: template[2].toString(),
+                active: template[6]
+            });
+
+            if (!template[6]) {
+                throw new MintError('Template is not active', 'TEMPLATE_INACTIVE');
+            }
+        } catch (error) {
+            throw new MintError(
+                `Template verification failed: ${error.message}`, 
+                'TEMPLATE_ERROR'
+            );
+        }
+
+        // Price calculations
+        const templatePrice = template[2];
+        const templatePriceIn6 = ethers.parseUnits(
+            ethers.formatUnits(templatePrice, CONTRACT_DECIMALS),
+            USDT_DECIMALS
         );
 
-        console.log(`Template price: ${ethers.formatUnits(templatePrice, 6)} USDT`);
-        console.log(`Raw price from template: ${templatePriceInWei.toString()}`);
-
-        // Check USDT balance
+        // Balance checks
         const usdtBalance = await USDT.balanceOf(signer.address);
-        console.log(`USDT Balance: ${ethers.formatUnits(usdtBalance, 6)} USDT`);
+        
+        console.log('\n--- Price and Balance Details ---');
+        console.log({
+            templatePrice: ethers.formatUnits(templatePrice, CONTRACT_DECIMALS),
+            requiredUSDT: ethers.formatUnits(templatePriceIn6, USDT_DECIMALS),
+            currentBalance: ethers.formatUnits(usdtBalance, USDT_DECIMALS)
+        });
 
-        // Compare balances using BigInt
-        const usdtBalanceBN = ethers.getBigInt(usdtBalance.toString());
-        const templatePriceBN = ethers.getBigInt(templatePrice.toString());
-
-        if (usdtBalanceBN < templatePriceBN) {
+        if (usdtBalance < templatePriceIn6) {
             throw new MintError(
-                'Insufficient USDT balance',
+                'Insufficient USDT balance', 
                 'INSUFFICIENT_BALANCE',
                 {
-                    required: ethers.formatUnits(templatePrice, 6),
-                    available: ethers.formatUnits(usdtBalance, 6),
-                    rawPrice: templatePriceInWei.toString()
+                    required: ethers.formatUnits(templatePriceIn6, USDT_DECIMALS),
+                    available: ethers.formatUnits(usdtBalance, USDT_DECIMALS)
                 }
             );
         }
 
-        // Transfer USDT to contract
-        console.log('Approving USDT transfer...');
-        const gasConfig = await gasManager.getGasConfig();
+        // Allowance management
+        const currentAllowance = await USDT.allowance(signer.address, nftAddress);
+        console.log('\n--- Allowance Check ---');
+        console.log(`Current allowance: ${ethers.formatUnits(currentAllowance, USDT_DECIMALS)} USDT`);
 
-        const approveTx = await USDT.approve(
-            contract.address,
-            templatePrice,
-            {
-                maxFeePerGas: gasConfig.maxFeePerGas,
-                maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas
-            }
-        );
-        await approveTx.wait();
-        console.log('USDT approved');
-
-        // Transfer USDT to contract
-        const transferTx = await USDT.transferFrom(
-            signer.address,
-            contract.address,
-            templatePrice,
-            {
-                maxFeePerGas: gasConfig.maxFeePerGas,
-                maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas
-            }
-        );
-        await transferTx.wait();
-        console.log('USDT transferred to contract');
-
-        const recipientAddress = process.env.MINT_RECIPIENT_ADDRESS;
-        console.log(`Minting to recipient address: ${recipientAddress}`);
-
-        // Create and upload metadata
-        const metadata = {
-            name: `WaveX ${process.env[`TEMPLATE_${templateId}_NAME`]} NFT`,
-            description: `WaveX ${process.env[`TEMPLATE_${templateId}_NAME`]} Access NFT`,
-            image: process.env[`TEMPLATE_${templateId}_IMAGE`],
-            attributes: [
+        if (currentAllowance < templatePriceIn6) {
+            console.log('Initiating USDT approval...');
+            const gasConfig = await gasManager.getGasConfig();
+            
+            const approveTx = await USDT.approve(
+                nftAddress,
+                templatePriceIn6,
                 {
-                    trait_type: "Template",
-                    value: process.env[`TEMPLATE_${templateId}_NAME`]
-                },
-                {
-                    trait_type: "Mint Date",
-                    value: new Date().toISOString()
+                    maxFeePerGas: gasConfig.maxFeePerGas,
+                    maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas
                 }
-            ]
-        };
+            );
+            
+            console.log('Waiting for approval confirmation...');
+            const approveReceipt = await approveTx.wait();
+            console.log('Approval confirmed:', approveReceipt.hash);
+        }
 
-        // Upload to IPFS
-        const pinata = new PinataManager();
-        await pinata.testAuthentication();
-        console.log('Uploading metadata to IPFS...');
-        const metadataURI = await pinata.uploadJSON(metadata, `token-${Date.now()}`);
-        console.log('Metadata uploaded:', metadataURI);
+        // Contract state verification
+        const isPaused = await nftContract.paused();
+        if (isPaused) {
+            throw new MintError('Contract is paused', 'CONTRACT_PAUSED');
+        }
 
-        // Mint NFT
-        console.log('Submitting mint transaction...');
-        const mintTx = await contract.mintFromTemplate(
+        // Mint transaction preparation
+        console.log('\n--- Preparing Mint Transaction ---');
+        const gasConfig = await gasManager.getGasConfig();
+        console.log('Gas prices:', {
+            maxFeePerGas: ethers.formatUnits(gasConfig.maxFeePerGas, 'gwei'),
+            maxPriorityFeePerGas: ethers.formatUnits(gasConfig.maxPriorityFeePerGas, 'gwei')
+        });
+
+        const metadataURI = `ipfs://template-${templateId}`;
+
+        // Debug logging
+        console.log('Preparing mint transaction parameters:', {
+            templateId: templateId.toString(),
+            recipient: recipientAddress,
+            metadataURI,
+            paymentToken: usdtAddress
+        });
+
+        // Execute mint transaction
+        const mintTx = await nftContract.mintFromTemplate(
             templateId,
             recipientAddress,
-            `ipfs://${metadataURI}`,
-            process.env.USDT_CONTRACT_ADDRESS,
-            templateId,
-            recipientAddress,
-            `ipfs://${metadataURI}`,
-            process.env.USDT_CONTRACT_ADDRESS, // Added paymentToken parameter here
+            metadataURI,
+            usdtAddress,
             {
                 maxFeePerGas: gasConfig.maxFeePerGas,
                 maxPriorityFeePerGas: gasConfig.maxPriorityFeePerGas,
-                value: 0 // No native token needed
+                gasLimit: 1000000,
+                value: 0
             }
         );
 
-        console.log('Transaction submitted:', mintTx.hash);
+        console.log('Mint transaction submitted:', mintTx.hash);
+
+        console.log('Waiting for confirmation...');
         const receipt = await mintTx.wait();
-        console.log('Transaction confirmed in block:', receipt.blockNumber);
+        
+        // Process receipt for token ID
+        const transferEvent = receipt.logs.find(
+            log => log.topics[0] === ethers.id("Transfer(address,address,uint256)")
+        );
+
+        const tokenId = transferEvent ? ethers.toBigInt(transferEvent.topics[3]) : null;
+
+        console.log('\n--- Mint Complete ---');
+        console.log({
+            success: true,
+            transactionHash: receipt.hash,
+            blockNumber: receipt.blockNumber,
+            tokenId: tokenId ? tokenId.toString() : null,
+            gasUsed: receipt.gasUsed.toString()
+        });
 
         return {
             success: true,
-            transactionHash: mintTx.hash,
-            blockNumber: receipt.blockNumber,
-            recipient: recipientAddress,
-            metadataURI: `ipfs://${metadataURI}`,
-            templateId,
-            price: ethers.formatUnits(templatePrice, 6),
-            paymentToken: process.env.USDT_CONTRACT_ADDRESS
+            transactionHash: receipt.hash,
+            tokenId: tokenId ? tokenId.toString() : null,
+            blockNumber: receipt.blockNumber
         };
 
     } catch (error) {
-        if (error instanceof MintError) {
-            console.error('Minting failed:', {
-                code: error.code,
-                message: error.message,
-                details: error.details
+        console.error("\n--- Mint Error ---");
+        console.error(error);
+        
+        if (error.transaction) {
+            console.error('Transaction details:', {
+                to: error.transaction.to,
+                from: error.transaction.from,
+                data: error.transaction.data
             });
-        } else {
-            console.error('Unexpected error during minting:', error);
         }
 
         return {
             success: false,
-            error: error instanceof MintError ? error : new MintError(
-                'Unexpected error during minting',
-                'UNKNOWN_ERROR',
-                { originalError: error.message }
-            )
+            error: {
+                message: error.message,
+                code: error.code || 'UNKNOWN_ERROR',
+                details: error.details || {}
+            }
         };
     }
-}
+};
 
 // Script execution
 if (require.main === module) {
     mint()
         .then(result => {
-            console.log('Mint result:', result);
+            console.log('\n--- Final Result ---');
+            console.log(result);
             process.exit(result.success ? 0 : 1);
         })
         .catch(error => {
-            console.error('Fatal error:', error);
+            console.error('\n--- Fatal Error ---');
+            console.error(error);
             process.exit(1);
         });
 }

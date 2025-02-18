@@ -32,8 +32,8 @@ module.exports = {
       url: `https://polygon-amoy.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       chainId: 80002,
-      gasPrice: 25000000000,
-      gas: parseInt(process.env.GAS_LIMIT) || 2100000,
+      gasPrice: 15000000000, // Reduced gasPrice to 15 gwei
+      gas: 3000000, // Increased gas limit
     },
   },
   gasReporter: {

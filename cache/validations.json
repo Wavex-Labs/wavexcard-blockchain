@@ -1550,9 +1550,9 @@
       "contracts/v3/WaveXNFTV3.sol:WaveXNFTV3": {
         "src": "contracts\\v3\\WaveXNFTV3.sol:11",
         "version": {
-          "withMetadata": "9284eedbf9b1bf26f2c61bace96f9035853070671158b00777b1e857a7a596f7",
-          "withoutMetadata": "93bce992209bf3a7449b61bfb4671fbbedcfb6ff8e77b31ac57df00647752128",
-          "linkedWithoutMetadata": "93bce992209bf3a7449b61bfb4671fbbedcfb6ff8e77b31ac57df00647752128"
+          "withMetadata": "50776de449d681ff18375e32a42382f01a7f4822d367ff06f7c24e2fa32b3919",
+          "withoutMetadata": "01202d4d790501a382fcb1ed6c7e21a8162ae918f44f42ab1e42188159605a11",
+          "linkedWithoutMetadata": "01202d4d790501a382fcb1ed6c7e21a8162ae918f44f42ab1e42188159605a11"
         },
         "inherit": [
           "@openzeppelin/contracts/access/Ownable.sol:Ownable",

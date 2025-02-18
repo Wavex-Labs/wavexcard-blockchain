@@ -1,3 +1,4 @@
+// Terminal Command: npx hardhat run scripts/templates/createTemplate.js --network polygonAmoy
 const hre = require("hardhat");
 const { getTemplateMetadata } = require('../config/templateConfig');
 const { gasManager } = require('../utils/gasUtils');
