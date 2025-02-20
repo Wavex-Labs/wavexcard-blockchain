@@ -1,0 +1,130 @@
+{
+  "name": "WaveX EventBrite Card #3",
+  "description": "WaveX EventBrite membership card with 0% discount",
+  "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb",
+  "attributes": [
+    {
+      "trait_type": "Token ID",
+      "value": "3"
+    },
+    {
+      "trait_type": "Template",
+      "value": "EventBrite"
+    },
+    {
+      "trait_type": "Balance",
+      "value": "$0.0 USD"
+    },
+    {
+      "trait_type": "Discount",
+      "value": "0%"
+    },
+    {
+      "trait_type": "VIP Status",
+      "value": "No"
+    },
+    {
+      "trait_type": "Valid Until",
+      "value": "2027-02-19T19:50:19.374Z"
+    }
+  ],
+  "properties": {
+    "type": "NFT",
+    "createdAt": "2025-02-19T19:50:19.381Z",
+    "tokenId": "3",
+    "templateId": "4",
+    "owner": "0x25ee87fE6b0141d3792d7d747628A67b5001F177"
+  },
+  "platforms": {
+    "opensea": {
+      "external_url": "https://wavexcard.com"
+    },
+    "nftVisual": {
+      "properties": {
+        "tier": "EventBrite",
+        "benefits": [
+          "Event Access",
+          "24/7 Support"
+        ],
+        "balance": "0.0",
+        "cardDesign": {
+          "primaryColor": "#4A90E2",
+          "textColor": "#FFFFFF",
+          "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb"
+        }
+      }
+    },
+    "appleWallet": {
+      "formatVersion": 1,
+      "passTypeIdentifier": "pass.com.wavex.eventbrite",
+      "serialNumber": "TOKEN-3",
+      "teamIdentifier": "JHQFQ72XMR",
+      "organizationName": "WaveX",
+      "logoText": "WaveX",
+      "foregroundColor": "#FFFFFF",
+      "backgroundColor": "#4A90E2",
+      "storeCard": {
+        "primaryFields": [
+          {
+            "key": "balance",
+            "label": "BALANCE",
+            "value": "0.0",
+            "currencyCode": "USD"
+          }
+        ],
+        "secondaryFields": [
+          {
+            "key": "tier",
+            "label": "TIER",
+            "value": "EventBrite"
+          },
+          {
+            "key": "discount",
+            "label": "DISCOUNT",
+            "value": "0%"
+          }
+        ],
+        "backFields": [
+          {
+            "key": "validUntil",
+            "label": "VALID UNTIL",
+            "value": "2027-02-19T19:50:19.374Z"
+          },
+          {
+            "key": "benefit0",
+            "label": "BENEFIT",
+            "value": "Event Access"
+          },
+          {
+            "key": "benefit1",
+            "label": "BENEFIT",
+            "value": "24/7 Support"
+          }
+        ]
+      }
+    },
+    "prepaidCard": {
+      "baseBalance": "0.0",
+      "price": "0.0",
+      "discount": "0",
+      "isVIP": false,
+      "validUntil": "2027-02-19T19:50:19.374Z",
+      "style": {
+        "colors": {
+          "primary": "#4A90E2",
+          "text": "#FFFFFF"
+        },
+        "image": "ipfs://QmY328jAjbgFvQLD1yuauCUAxyiQT8kEdtZzde1Xy2QkPb"
+      },
+      "features": {
+        "benefits": [
+          "Event Access",
+          "24/7 Support"
+        ],
+        "transferable": true,
+        "rechargeable": true,
+        "upgradeable": true
+      }
+    }
+  }
+}
